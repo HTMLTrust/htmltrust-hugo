@@ -1,0 +1,7 @@
+{{- /*
+htmltrust-meta.html — optional <head> meta tags advertising HTMLTrust support
+for this page. Include from your baseof.html or head partial.
+*/ -}}
+{{- if and .Params.htmltrust .Params.htmltrust.sign -}}
+<meta name="htmltrust-signed" content="true">
+{{- end -}}

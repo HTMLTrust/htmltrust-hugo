@@ -1,0 +1,4 @@
+/htmltrust-sign
+/dist/
+*.test
+.DS_Store

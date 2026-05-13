@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - run: go test ./...
+      - run: go vet ./...
+      - name: Build htmltrust-sign
+        run: go build ./cmd/htmltrust-sign
+
+  smoke:
+    name: Smoke test against a Hugo build
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: '0.128.0'
+      - name: Build htmltrust-sign
+        run: go build -o htmltrust-sign ./cmd/htmltrust-sign
+      - name: Generate ephemeral key for smoke test
+        run: openssl genpkey -algorithm ed25519 -out smoke.pem
+      - name: Build smoke site
+        run: |
+          mkdir -p smoke/content/posts smoke/layouts/_default smoke/layouts/partials
+          {
+            echo 'baseURL = "https://example.com/"'
+            echo 'title = "Smoke"'
+          } > smoke/hugo.toml
+          cat > smoke/content/posts/hello.md <<'POST'
+          ---
+          title: "Hello"
+          date: 2026-01-01T00:00:00Z
+          htmltrust:
+            sign: true
+            claims:
+              content-type: "Article"
+          ---
+          Body with smart quotes and an em dash.
+          POST
+          cat > smoke/layouts/_default/single.html <<'TEMPL'
+          <!DOCTYPE html><html><head><title>{{ .Title }}</title></head><body>{{ partial "htmltrust-signed-section.html" . }}</body></html>
+          TEMPL
+          cp layouts/partials/htmltrust-signed-section.html smoke/layouts/partials/
+          cd smoke && hugo --minify
+      - name: Sign and verify required attributes
+        run: |
+          ./htmltrust-sign --dir smoke/public --keyid did:web:example.com --domain www.example.com --keyfile smoke.pem -v
+          out=smoke/public/posts/hello/index.html
+          grep -q 'signature="' "$out"
+          grep -q 'content-hash="sha256:' "$out"
+          grep -q 'keyid="did:web:example.com"' "$out"
+          grep -q 'algorithm="ed25519"' "$out"
+          ! grep -q 'data-htmltrust-placeholder' "$out"
+          echo "OK: all required attributes present, placeholder marker removed"

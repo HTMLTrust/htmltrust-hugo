@@ -1,0 +1,49 @@
+{{- /*
+htmltrust-signed-section.html — wraps .Content in a <signed-section> placeholder.
+
+Spec-conformant cryptographic signing (content-hash + signature) is NOT performed
+in this template. Hugo cannot do NFKC normalization or Ed25519 signing. This
+partial emits a structural placeholder; the companion `htmltrust-sign` CLI fills
+in the four required attributes (content-hash, signature, keyid, algorithm)
+after `hugo build`.
+
+Opt in per-page via frontmatter:
+
+  htmltrust:
+    sign: true
+    claims:
+      ContentType: "Article"
+      License: "CC-BY-4.0"
+
+Site-level defaults (config.toml):
+
+  [params.htmltrust]
+    keyid     = "did:web:example.com"
+    algorithm = "ed25519"
+*/ -}}
+{{- if and .Params.htmltrust .Params.htmltrust.sign -}}
+{{- $st := .Site.Params.htmltrust | default dict -}}
+{{- $keyid := .Params.htmltrust.keyid | default $st.keyid | default "" -}}
+{{- $algo := .Params.htmltrust.algorithm | default $st.algorithm | default "ed25519" -}}
+{{- $author := .Params.author | default .Site.Params.author | default "" -}}
+{{- $signedAt := "" -}}
+{{- if not .Date.IsZero -}}
+  {{- $signedAt = .Date.Format "2006-01-02T15:04:05Z07:00" -}}
+{{- end -}}
+<signed-section content-hash="" signature="" keyid="{{ $keyid }}" algorithm="{{ $algo }}" data-htmltrust-placeholder="true" style="display: block;">
+{{- with $author }}
+  <meta name="author" content="{{ . }}">
+{{- end }}
+{{- with $signedAt }}
+  <meta name="signed-at" content="{{ . }}">
+{{- end }}
+{{- with .Params.htmltrust.claims }}
+{{- range $key, $value := . }}
+  <meta name="claim:{{ $key }}" content="{{ $value }}">
+{{- end }}
+{{- end }}
+{{ .Content }}
+</signed-section>
+{{- else -}}
+{{ .Content }}
+{{- end -}}
