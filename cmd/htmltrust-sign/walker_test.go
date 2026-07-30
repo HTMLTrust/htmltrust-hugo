@@ -29,6 +29,7 @@ func testKey(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey, string) {
 func TestSignHTML_FillsAllRequiredAttrs(t *testing.T) {
 	_, priv, pubPEM := testKey(t)
 	input := []byte(`<html><body><signed-section content-hash="" signature="" keyid="" algorithm="ed25519">
+<meta name="author" content="Alice Example">
 <meta name="signed-at" content="2026-05-12T20:00:00Z">
 <meta name="claim:ContentType" content="Article">
 <p>Hello world.</p>
@@ -38,7 +39,7 @@ func TestSignHTML_FillsAllRequiredAttrs(t *testing.T) {
 		PrivateKey: priv,
 		Keyid:      "did:web:jason-grey.com",
 		Algorithm:  "ed25519",
-		Domain:     "www.htmltrust.org",
+		Domain:     "https://www.htmltrust.org",
 	})
 	if err != nil {
 		t.Fatalf("SignHTML: %v", err)
@@ -66,9 +67,13 @@ func TestSignHTML_FillsAllRequiredAttrs(t *testing.T) {
 	// binding we expect.
 	contentHash := mustGrepAttr(t, s, "content-hash")
 	signature := mustGrepAttr(t, s, "signature")
-	claims := map[string]string{"ContentType": "Article"}
+	claims := map[string]string{
+		"author":            "Alice Example",
+		"signed-at":         "2026-05-12T20:00:00Z",
+		"claim:ContentType": "Article",
+	}
 	claimsHash := ClaimsHash(claims)
-	binding, err := canon.BuildSignatureBinding(contentHash, claimsHash, "www.htmltrust.org", "2026-05-12T20:00:00Z")
+	binding, err := canon.BuildSignatureBinding(contentHash, claimsHash, "https://www.htmltrust.org", "2026-05-12T20:00:00Z")
 	if err != nil {
 		t.Fatalf("BuildSignatureBinding: %v", err)
 	}
@@ -97,7 +102,7 @@ func TestSignHTML_MultipleSectionsInOnePage(t *testing.T) {
 		PrivateKey: priv,
 		Keyid:      "did:web:jason-grey.com",
 		Algorithm:  "ed25519",
-		Domain:     "www.htmltrust.org",
+		Domain:     "https://www.htmltrust.org",
 	})
 	if err != nil {
 		t.Fatalf("SignHTML: %v", err)
@@ -117,7 +122,7 @@ func TestSignHTML_FallbackSignedAtInserted(t *testing.T) {
 	out, _, err := SignHTML(input, SignerConfig{
 		PrivateKey:       priv,
 		Keyid:            "did:web:jason-grey.com",
-		Domain:           "www.htmltrust.org",
+		Domain:           "https://www.htmltrust.org",
 		SignedAtFallback: fallback,
 	})
 	if err != nil {
@@ -134,7 +139,7 @@ func TestSignHTML_ErrorsWhenSignedAtMissingAndNoFallback(t *testing.T) {
 	_, _, err := SignHTML(input, SignerConfig{
 		PrivateKey: priv,
 		Keyid:      "did:web:jason-grey.com",
-		Domain:     "www.htmltrust.org",
+		Domain:     "https://www.htmltrust.org",
 	})
 	if err == nil {
 		t.Fatalf("expected error when signed-at is missing and no fallback set")
@@ -147,7 +152,7 @@ func TestSignHTML_IgnoresPagesWithoutSignedSection(t *testing.T) {
 	out, n, err := SignHTML(input, SignerConfig{
 		PrivateKey: priv,
 		Keyid:      "did:web:jason-grey.com",
-		Domain:     "www.htmltrust.org",
+		Domain:     "https://www.htmltrust.org",
 	})
 	if err != nil {
 		t.Fatalf("SignHTML on plain page: %v", err)
@@ -157,6 +162,153 @@ func TestSignHTML_IgnoresPagesWithoutSignedSection(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "No signed sections here.") {
 		t.Fatalf("body content lost during render")
+	}
+}
+
+func TestSignHTML_NormalizesBareDomainToOrigin(t *testing.T) {
+	_, priv, pubPEM := testKey(t)
+	input := []byte(`<html><body><signed-section>
+<meta name="signed-at" content="2026-05-12T20:00:00Z">
+<p>Hello world.</p>
+</signed-section></body></html>`)
+
+	out, _, err := SignHTML(input, SignerConfig{
+		PrivateKey: priv,
+		Keyid:      "did:web:jason-grey.com",
+		Domain:     "WWW.HTMLTRUST.ORG",
+	})
+	if err != nil {
+		t.Fatalf("SignHTML: %v", err)
+	}
+	s := string(out)
+	contentHash := mustGrepAttr(t, s, "content-hash")
+	signature := mustGrepAttr(t, s, "signature")
+	claimsHash := ClaimsHash(map[string]string{"signed-at": "2026-05-12T20:00:00Z"})
+	binding, err := canon.BuildSignatureBinding(contentHash, claimsHash, "https://www.htmltrust.org", "2026-05-12T20:00:00Z")
+	if err != nil {
+		t.Fatalf("BuildSignatureBinding: %v", err)
+	}
+	ok, err := canon.VerifySignature(binding, signature, pubPEM, "ed25519")
+	if err != nil {
+		t.Fatalf("VerifySignature err: %v", err)
+	}
+	if !ok {
+		t.Fatalf("signature did not verify against normalized origin")
+	}
+}
+
+func TestSignHTML_RejectsOriginWithPath(t *testing.T) {
+	_, priv, _ := testKey(t)
+	input := []byte(`<html><body><signed-section><meta name="signed-at" content="2026-05-12T20:00:00Z"><p>x</p></signed-section></body></html>`)
+	_, _, err := SignHTML(input, SignerConfig{
+		PrivateKey: priv,
+		Keyid:      "did:web:jason-grey.com",
+		Domain:     "https://www.htmltrust.org/posts",
+	})
+	if err == nil {
+		t.Fatalf("expected origin with path to fail")
+	}
+}
+
+func TestSignHTML_SignsAuthorSignedAtAndClaimMeta(t *testing.T) {
+	_, priv, pubPEM := testKey(t)
+	input := []byte(`<html><body><signed-section>
+<meta name="author" content="Alice Example">
+<meta name="signed-at" content="2026-05-12T20:00:00Z">
+<meta name="claim:License" content="CC-BY-4.0">
+<p>Hello world.</p>
+</signed-section></body></html>`)
+
+	out, _, err := SignHTML(input, SignerConfig{
+		PrivateKey: priv,
+		Keyid:      "did:web:jason-grey.com",
+		Domain:     "https://www.htmltrust.org",
+	})
+	if err != nil {
+		t.Fatalf("SignHTML: %v", err)
+	}
+	s := string(out)
+	contentHash := mustGrepAttr(t, s, "content-hash")
+	signature := mustGrepAttr(t, s, "signature")
+	claimsHash := ClaimsHash(map[string]string{
+		"author":        "Alice Example",
+		"signed-at":     "2026-05-12T20:00:00Z",
+		"claim:License": "CC-BY-4.0",
+	})
+	binding, err := canon.BuildSignatureBinding(contentHash, claimsHash, "https://www.htmltrust.org", "2026-05-12T20:00:00Z")
+	if err != nil {
+		t.Fatalf("BuildSignatureBinding: %v", err)
+	}
+	ok, err := canon.VerifySignature(binding, signature, pubPEM, "ed25519")
+	if err != nil {
+		t.Fatalf("VerifySignature err: %v", err)
+	}
+	if !ok {
+		t.Fatalf("signature did not verify with all direct child meta claims")
+	}
+}
+
+func TestSignHTML_RejectsMalformedClaimMeta(t *testing.T) {
+	_, priv, _ := testKey(t)
+	input := []byte(`<html><body><signed-section>
+<meta name="signed-at" content="2026-05-12T20:00:00Z">
+<meta name="author">
+<p>Hello world.</p>
+</signed-section></body></html>`)
+	_, _, err := SignHTML(input, SignerConfig{
+		PrivateKey: priv,
+		Keyid:      "did:web:jason-grey.com",
+		Domain:     "https://www.htmltrust.org",
+	})
+	if err == nil {
+		t.Fatalf("expected malformed claim meta to fail")
+	}
+}
+
+func TestSignHTML_RejectsNonUTCSignedAt(t *testing.T) {
+	_, priv, _ := testKey(t)
+	input := []byte(`<html><body><signed-section>
+<meta name="signed-at" content="2026-05-12T15:00:00-05:00">
+<p>Hello world.</p>
+</signed-section></body></html>`)
+	_, _, err := SignHTML(input, SignerConfig{
+		PrivateKey: priv,
+		Keyid:      "did:web:jason-grey.com",
+		Domain:     "https://www.htmltrust.org",
+	})
+	if err == nil {
+		t.Fatalf("expected non-UTC signed-at to fail")
+	}
+}
+
+func TestContentHash_IncludesSignedSemanticAttributes(t *testing.T) {
+	body := `<p><a href="/docs">Read</a><img src="hero.png" alt="Hero" aria-label="Hero image"></p>`
+	withoutAttrs := `<p><a href="/docs">Read</a><img></p>`
+	withHash, err := ContentHash(body, "https://www.htmltrust.org/posts/one/")
+	if err != nil {
+		t.Fatalf("ContentHash with attrs: %v", err)
+	}
+	withoutHash, err := ContentHash(withoutAttrs, "https://www.htmltrust.org/posts/one/")
+	if err != nil {
+		t.Fatalf("ContentHash without attrs: %v", err)
+	}
+	if withHash == withoutHash {
+		t.Fatalf("semantic attributes did not affect content hash: %s", withHash)
+	}
+
+	canonical, err := canon.ExtractCanonicalText(body, canon.Options{BaseURL: "https://www.htmltrust.org/posts/one/"})
+	if err != nil {
+		t.Fatalf("ExtractCanonicalText: %v", err)
+	}
+	for _, want := range []string{
+		"@attr:a:href:https://www.htmltrust.org/docs\n",
+		"@attr:img:src:https://www.htmltrust.org/posts/one/hero.png\n",
+		"@attr:img:alt:Hero\n",
+		"@attr:img:aria-label:Hero image",
+	} {
+		if !strings.Contains(canonical, want) {
+			t.Fatalf("canonical content missing %q in %q", want, canonical)
+		}
 	}
 }
 

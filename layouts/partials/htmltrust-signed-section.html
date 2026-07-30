@@ -28,7 +28,7 @@ Site-level defaults (config.toml):
 {{- $author := .Params.author | default .Site.Params.author | default "" -}}
 {{- $signedAt := "" -}}
 {{- if not .Date.IsZero -}}
-  {{- $signedAt = .Date.Format "2006-01-02T15:04:05Z07:00" -}}
+  {{- $signedAt = .Date.UTC.Format "2006-01-02T15:04:05Z" -}}
 {{- end -}}
 <signed-section content-hash="" signature="" keyid="{{ $keyid }}" algorithm="{{ $algo }}" data-htmltrust-placeholder="true" style="display: block;">
 {{- with $author }}

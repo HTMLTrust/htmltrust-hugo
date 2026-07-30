@@ -16,12 +16,13 @@ import (
 // SignerConfig holds the inputs the walker needs to fill in signed-section
 // attributes. Keyid and Algorithm override any values already on the element;
 // SignedAtFallback supplies a timestamp if the page didn't set one. Domain is
-// required by the spec binding.
+// the legacy signing-payload field name; its value must be a serialized origin.
 type SignerConfig struct {
 	PrivateKey       ed25519.PrivateKey
 	Keyid            string
 	Algorithm        string // "ed25519" only for now
 	Domain           string
+	BaseURL          string
 	SignedAtFallback time.Time // used if <meta name="signed-at"> absent
 }
 
@@ -46,6 +47,14 @@ func SignHTML(input []byte, cfg SignerConfig) ([]byte, int, error) {
 	}
 	if cfg.Domain == "" {
 		return nil, 0, errors.New("SignHTML: Domain is required")
+	}
+	origin, err := normalizeOrigin(cfg.Domain)
+	if err != nil {
+		return nil, 0, fmt.Errorf("SignHTML: Domain must be a serialized origin or bare host: %w", err)
+	}
+	cfg.Domain = origin
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = origin + "/"
 	}
 
 	doc, err := html.Parse(bytes.NewReader(input))
@@ -82,20 +91,13 @@ func SignHTML(input []byte, cfg SignerConfig) ([]byte, int, error) {
 // signNode rewrites a single <signed-section> element's required attributes.
 func signNode(n *html.Node, cfg SignerConfig) error {
 	// Extract inner <meta> claims and signed-at.
-	claims := map[string]string{}
+	claims, err := collectDirectClaims(n)
+	if err != nil {
+		return err
+	}
 	signedAt := ""
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if c.Type != html.ElementNode || strings.ToLower(c.Data) != "meta" {
-			continue
-		}
-		name := getAttr(c, "name")
-		content := getAttr(c, "content")
-		switch {
-		case name == "signed-at":
-			signedAt = content
-		case strings.HasPrefix(name, "claim:"):
-			claims[strings.TrimPrefix(name, "claim:")] = content
-		}
+	if v, ok := claims["signed-at"]; ok {
+		signedAt = v
 	}
 	if signedAt == "" {
 		if cfg.SignedAtFallback.IsZero() {
@@ -104,13 +106,18 @@ func signNode(n *html.Node, cfg SignerConfig) error {
 		signedAt = cfg.SignedAtFallback.UTC().Format(time.RFC3339)
 		// Insert a meta tag so the verifier can see it.
 		setSignedAtMeta(n, signedAt)
+		claims["signed-at"] = signedAt
+	}
+	signedAt = normalizePlainText(signedAt)
+	if err := validateSignedAt(signedAt); err != nil {
+		return err
 	}
 
 	innerHTML, err := renderChildren(n)
 	if err != nil {
 		return fmt.Errorf("signNode: render children: %w", err)
 	}
-	contentHash, err := ContentHash(innerHTML)
+	contentHash, err := ContentHash(innerHTML, cfg.BaseURL)
 	if err != nil {
 		return fmt.Errorf("signNode: content hash: %w", err)
 	}
@@ -149,7 +156,7 @@ func isSignedSection(n *html.Node) bool {
 
 func getAttr(n *html.Node, key string) string {
 	for _, a := range n.Attr {
-		if a.Key == key {
+		if strings.EqualFold(a.Key, key) {
 			return a.Val
 		}
 	}
@@ -191,8 +198,42 @@ func setSignedAtMeta(n *html.Node, signedAt string) {
 	n.InsertBefore(meta, n.FirstChild)
 }
 
+func collectDirectClaims(n *html.Node) (map[string]string, error) {
+	claims := map[string]string{}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode || strings.ToLower(c.Data) != "meta" {
+			continue
+		}
+		name, hasName := getAttrOK(c, "name")
+		content, hasContent := getAttrOK(c, "content")
+		if !hasName || !hasContent {
+			return nil, errors.New("signNode: direct child <meta> claim is missing name or content")
+		}
+		normalizedName := normalizePlainText(name)
+		if normalizedName == "" {
+			return nil, errors.New("signNode: direct child <meta> claim has empty normalized name")
+		}
+		if _, exists := claims[normalizedName]; exists {
+			return nil, fmt.Errorf("signNode: duplicate direct child <meta> claim %q", normalizedName)
+		}
+		claims[normalizedName] = normalizePlainText(content)
+	}
+	return claims, nil
+}
+
+func validateSignedAt(signedAt string) error {
+	t, err := time.Parse(time.RFC3339, signedAt)
+	if err != nil {
+		return fmt.Errorf("signNode: signed-at must be RFC3339 UTC: %w", err)
+	}
+	if !strings.HasSuffix(signedAt, "Z") || t.Location() != time.UTC {
+		return fmt.Errorf("signNode: signed-at must use UTC Z offset, got %q", signedAt)
+	}
+	return nil
+}
+
 // renderChildren renders the inner HTML of n (everything between its tags) as
-// a string. We feed this string to ExtractCanonicalText for content hashing.
+// a string. The content hash canonicalizer consumes this rendered fragment.
 func renderChildren(n *html.Node) (string, error) {
 	var buf bytes.Buffer
 	for c := n.FirstChild; c != nil; c = c.NextSibling {

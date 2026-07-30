@@ -78,7 +78,7 @@ go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@latest
 htmltrust-sign \
   --dir public \
   --keyid did:web:jason-grey.com \
-  --domain www.example.com \
+  --domain https://www.example.com \
   --keyfile $HOME/.htmltrust/signing-key.pem
 ```
 
@@ -86,7 +86,7 @@ Or with the private key in an env var (typical for CI):
 
 ```sh
 export HTMLTRUST_SIGNING_KEY="$(cat path/to/key.pem)"
-htmltrust-sign --dir public --keyid did:web:jason-grey.com --domain www.example.com
+htmltrust-sign --dir public --keyid did:web:jason-grey.com --domain https://www.example.com
 ```
 
 ### Flags
@@ -95,7 +95,7 @@ htmltrust-sign --dir public --keyid did:web:jason-grey.com --domain www.example.
 |---|---|---|
 | `--dir` | `public` | Directory of built HTML files to scan. |
 | `--keyid` | _(required)_ | Identifier embedded in each `<signed-section>` and used by verifiers to fetch your public key. Standard form is `did:web:<host>`. |
-| `--domain` | _(required)_ | Publication origin for the signature binding. Bind to the apex or canonical `www.` hostname — must match where you serve the page. |
+| `--domain` | _(required)_ | Publication origin for the signature binding, serialized as `scheme://host[:port]`. Bare hosts are accepted for compatibility and normalized to `https://host`. No path, query, fragment, or credentials. |
 | `--algorithm` | `ed25519` | Only `ed25519` is supported in this revision. |
 | `--keyfile` | _none_ | PEM-encoded PKCS#8 Ed25519 private key. Falls back to `HTMLTRUST_SIGNING_KEY` env var if unset. |
 | `--dry-run` | `false` | Report what would change without writing. |
@@ -121,6 +121,7 @@ After `hugo --minify` + `htmltrust-sign`:
 ```
 
 Hashes and signatures are **unpadded Base64** per spec §2.1.
+The alphabet is standard Base64 (`+` and `/`), not base64url.
 
 ## Key generation
 
@@ -167,7 +168,7 @@ Keep `signing-key.pem` private — in a password manager, a KMS, or a CI secret.
     htmltrust-sign \
       --dir public \
       --keyid did:web:example.com \
-      --domain www.example.com
+      --domain https://www.example.com
 ```
 
 ## How it works (internals)
@@ -175,19 +176,21 @@ Keep `signing-key.pem` private — in a password manager, a KMS, or a CI secret.
 1. The Hugo partial wraps `.Content` in a `<signed-section>` element with empty `content-hash` and `signature` attributes and a `data-htmltrust-placeholder="true"` marker. Inner `<meta>` tags carry author, signed-at, and claims.
 2. After `hugo build`, the CLI walks every `*.html` file in `--dir` using `golang.org/x/net/html`.
 3. For each `<signed-section>` found, it:
-   1. Reads inner `<meta>` tags to recover `signed-at` and the claims map.
-   2. Renders the inner HTML (everything between the tags) to a string and runs it through `canonicalize.ExtractCanonicalText` from [htmltrust-canonicalization/go](https://github.com/HTMLTrust/htmltrust-canonicalization). This strips `<meta>`/`<script>`/etc. and applies the full 8-phase canonicalization pipeline (NFKC, Unicode whitespace, quotes, dashes, ellipsis, invisible-character stripping, bidi controls, language-specific).
+   1. Reads every direct child `<meta name="..." content="...">` claim, including `author`, `signed-at`, and `claim:*` entries.
+   2. Renders the inner HTML (everything between the tags) and canonicalizes signed content locally using the same Unicode normalization rules as [htmltrust-canonicalization/go](https://github.com/HTMLTrust/htmltrust-canonicalization). Direct child claim `<meta>` elements and excluded elements are omitted from content, while signed semantic attributes `href`, `src`, `alt`, and `aria-label` are included.
    3. Computes `content-hash = "sha256:" + RawStdBase64(sha256(canonical_text))`.
-   4. Serializes the claims map via `canonicalize.CanonicalizeClaims` and hashes it the same way.
+   4. Serializes the claims as sorted `name:content\n` records and hashes them the same way.
    5. Builds the spec binding string `{content-hash}:{claims-hash}:{domain}:{signed-at}` via `canonicalize.BuildSignatureBinding`.
    6. Signs the binding with the Ed25519 private key.
    7. Rewrites the four required attributes and removes the placeholder marker.
 
 ## Spec conformance
 
-- **Canonicalization:** delegated entirely to [htmltrust-canonicalization/go](https://github.com/HTMLTrust/htmltrust-canonicalization). What the spec library says is canonical _is_ what gets hashed here. Conformance tests in that repo are authoritative.
-- **Hash + signature encoding:** unpadded Base64 (`base64.RawStdEncoding`).
-- **Binding format:** `{content-hash}:{claims-hash}:{domain}:{signed-at}` per spec §2.1. Computed via `canonicalize.BuildSignatureBinding`.
+- **Canonicalization:** uses [htmltrust-canonicalization/go](https://github.com/HTMLTrust/htmltrust-canonicalization) for Unicode text normalization and local DOM walking for the current signed semantic attribute and direct-child claim rules.
+- **Hash + signature encoding:** canonical unpadded standard Base64 (`base64.RawStdEncoding`).
+- **Binding format:** `{content-hash}:{claims-hash}:{domain}:{signed-at}` per spec §2.1. The legacy `domain` field carries the serialized publication origin.
+- **Claim coverage:** every direct child `<meta name content>` claim is signed, including `author`, `signed-at`, and `claim:*`.
+- **Semantic attribute coverage:** `href`, `src`, `alt`, and `aria-label` on included descendants contribute to the content hash.
 - **Required attributes:** all four (`content-hash`, `signature`, `keyid`, `algorithm`) are emitted on every signed section.
 
 Verification against this signer's output is round-tripped against `canonicalize.VerifySignature` in the test suite.

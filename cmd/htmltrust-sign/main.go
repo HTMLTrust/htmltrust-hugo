@@ -10,7 +10,7 @@
 // Usage:
 //
 //	htmltrust-sign --dir public --keyid did:web:jason-grey.com \
-//	    --domain www.htmltrust.org --keyfile /path/to/key.pem
+//	    --domain https://www.htmltrust.org --keyfile /path/to/key.pem
 //
 // The private key may also come from the HTMLTRUST_SIGNING_KEY environment
 // variable (PEM-encoded PKCS#8 Ed25519) which is what CI typically uses.
@@ -38,7 +38,7 @@ func run(args []string) error {
 	var (
 		dir       = fs.String("dir", "public", "directory of built HTML files to scan")
 		keyid     = fs.String("keyid", "", "keyid to embed (e.g. did:web:jason-grey.com) — required")
-		domain    = fs.String("domain", "", "publication domain for the signature binding (e.g. www.htmltrust.org) — required")
+		domain    = fs.String("domain", "", "publication origin for the signature binding (e.g. https://www.htmltrust.org). Bare hosts are normalized to https origins for compatibility — required")
 		algorithm = fs.String("algorithm", "ed25519", "signature algorithm (only ed25519 supported)")
 		keyfile   = fs.String("keyfile", "", "PEM-encoded PKCS#8 Ed25519 private key file (or set HTMLTRUST_SIGNING_KEY env var)")
 		dryRun    = fs.Bool("dry-run", false, "parse and report what would change, but don't write")
@@ -52,6 +52,10 @@ func run(args []string) error {
 	}
 	if *domain == "" {
 		return fmt.Errorf("--domain is required")
+	}
+	origin, err := normalizeOrigin(*domain)
+	if err != nil {
+		return fmt.Errorf("--domain must be a serialized Web origin or bare host: %w", err)
 	}
 
 	pemBytes, err := loadKeyMaterial(*keyfile)
@@ -67,7 +71,7 @@ func run(args []string) error {
 		PrivateKey:       priv,
 		Keyid:            *keyid,
 		Algorithm:        *algorithm,
-		Domain:           *domain,
+		Domain:           origin,
 		SignedAtFallback: time.Now().UTC(),
 	}
 
@@ -90,6 +94,11 @@ func run(args []string) error {
 		if !strings.Contains(string(in), "<signed-section") {
 			continue
 		}
+		baseURL, err := documentBaseURL(origin, *dir, path)
+		if err != nil {
+			return fmt.Errorf("base URL for %s: %w", path, err)
+		}
+		cfg.BaseURL = baseURL
 		out, n, err := SignHTML(in, cfg)
 		if err != nil {
 			return fmt.Errorf("sign %s: %w", path, err)

@@ -70,10 +70,22 @@ func TestContentHash_NormalizesQuotesAndDashes(t *testing.T) {
 }
 
 func TestClaimsHash_OrderIndependent(t *testing.T) {
-	a := map[string]string{"License": "MIT", "ContentType": "Article"}
-	b := map[string]string{"ContentType": "Article", "License": "MIT"}
+	a := map[string]string{"claim:License": "MIT", "claim:ContentType": "Article"}
+	b := map[string]string{"claim:ContentType": "Article", "claim:License": "MIT"}
 	if ClaimsHash(a) != ClaimsHash(b) {
 		t.Fatalf("ClaimsHash should be order-independent")
+	}
+}
+
+func TestCanonicalizeClaims_UsesColonLinesAndIncludesStandardClaims(t *testing.T) {
+	got := CanonicalizeClaims(map[string]string{
+		"signed-at":     "2026-05-12T20:00:00Z",
+		"author":        "Alice Example",
+		"claim:License": "CC-BY-4.0",
+	})
+	want := "author:Alice Example\nclaim:License:CC-BY-4.0\nsigned-at:2026-05-12T20:00:00Z\n"
+	if got != want {
+		t.Fatalf("CanonicalizeClaims = %q, want %q", got, want)
 	}
 }
 
@@ -90,7 +102,7 @@ func TestSignAndVerifyRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("keygen: %v", err)
 	}
-	binding := "sha256:abc:sha256:def:example.com:2026-05-12T20:00:00Z"
+	binding := "sha256:abc:sha256:def:https://example.com:2026-05-12T20:00:00Z"
 	sigB64 := SignEd25519(binding, priv)
 	if strings.ContainsRune(sigB64, '=') {
 		t.Fatalf("signature must be unpadded base64, got %q", sigB64)
