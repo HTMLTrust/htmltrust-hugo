@@ -1,5 +1,5 @@
-github.com/HTMLTrust/htmltrust-canonicalization/go v0.0.0-20260730200345-638a60cd78c9 h1:1jwVaRf1HhsEAkg+6fEUCCYA1Ze6KoYKk7IOQx6Ehl4=
-github.com/HTMLTrust/htmltrust-canonicalization/go v0.0.0-20260730200345-638a60cd78c9/go.mod h1:xsW9mH61KG3nqybQyWSTBZgr0cy9RZX4g2otXxlz1u8=
+github.com/HTMLTrust/htmltrust-canonicalization/go v0.0.0-20260827215642-79b0d52fecd9 h1:kIwdvxJJveRUTXIkfSEUY5oK0HtDUMdcrFq+cr4GAQo=
+github.com/HTMLTrust/htmltrust-canonicalization/go v0.0.0-20260827215642-79b0d52fecd9/go.mod h1:xsW9mH61KG3nqybQyWSTBZgr0cy9RZX4g2otXxlz1u8=
 golang.org/x/net v0.55.0 h1:bcvxaJn3e1U6InsFWt1JUq1aSjnRxLzT2rtD2KfkDF8=
 golang.org/x/net v0.55.0/go.mod h1:L5U2KuzuOe1lY7Z+aWVIKK6qEeJXnXV9yzGA+WCHJww=
 golang.org/x/text v0.39.0 h1:UbZz4pLOvn600D6Oh6GGEI6VAmndrEBLv8/6BEXzyus=
