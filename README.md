@@ -2,6 +2,29 @@
 
 Spec-conformant HTMLTrust content signing for [Hugo](https://gohugo.io/) static sites.
 
+## Project status and compatibility
+
+This repository is the Hugo module and post-build signer reference
+implementation. It is usable for sites that opt into the `signed-section`
+partial. The CLI signs generated HTML; it does not manage keys, publish DID
+documents, or verify a site in the browser.
+
+The checkout currently builds with Go 1.25 and Hugo 0.128 or newer. Its Go
+module pins the canonicalization binding to the immutable commit
+`79b0d52fecd958f8fc7ade713fe0799ca1e79626`, corresponding to canonicalization
+release `v0.2.2`.
+
+| Component | Version or commit | Role |
+|---|---|---|
+| `htmltrust-hugo` | `d39ef12d068d6028076d91eedf1a5f98abcd7b8d` baseline | Hugo partial and signer |
+| Go canonicalization binding | `v0.0.0-20260827215642-79b0d52fecd9` | Unicode, HTML, claims, and URL canonicalization |
+| Hugo | `0.128.0` or newer | Static-site build |
+| Go | `1.25` or newer | CLI build and tests |
+
+Pin both this module and its canonicalization dependency to reviewed commits
+when reproducing a release. Avoid branch names and moving version selectors in
+production builds.
+
 This module is the missing piece for actually-signed Hugo sites — not just content-hashed. It ships two things that work together:
 
 1. **A Hugo Module** with a `<signed-section>` partial you drop into your templates. Build-time only emits the structural element with claims metadata.
@@ -12,6 +35,27 @@ This module is the missing piece for actually-signed Hugo sites — not just con
 The HTMLTrust spec requires Unicode NFKC normalization, structured claims hashing, and cryptographic signatures. Hugo's template engine has none of those: no NFKC, no Ed25519, no PEM parsing. Earlier Hugo-only integrations papered over this by computing a SHA-256 over a crude `replaceRE \s+ " "` canonicalization. That produces hashes that don't match the canonicalization spec, and never produces a real signature.
 
 This module is honest about that split. The partial emits a placeholder that's structurally complete. The CLI does the cryptography.
+
+## Quick start from a clean checkout
+
+```sh
+git clone https://github.com/HTMLTrust/htmltrust-hugo.git
+cd htmltrust-hugo
+go test ./...
+go vet ./...
+go build ./cmd/htmltrust-sign
+```
+
+To run the optional cross-repository vector check, place the canonicalization
+repository beside this checkout under the same parent directory:
+
+```sh
+git clone https://github.com/HTMLTrust/htmltrust-canonicalization.git ../htmltrust-canonicalization
+go test ./cmd/htmltrust-sign
+```
+
+The check reads the shared fixture when that sibling checkout is present. The
+normal unit suite remains self-contained.
 
 ## Install
 
@@ -28,8 +72,11 @@ Initialize the module if you haven't:
 
 ```sh
 hugo mod init github.com/your-org/your-site
-hugo mod get github.com/HTMLTrust/htmltrust-hugo
+hugo mod get github.com/HTMLTrust/htmltrust-hugo@d39ef12d068d6028076d91eedf1a5f98abcd7b8d
 ```
+
+Run `hugo mod graph` after installation to confirm that the canonicalization
+dependency resolves to the v0.2.2 commit shown above.
 
 ### 2. Wire the partial into your content template
 
@@ -73,7 +120,7 @@ These show up as defaults on the placeholder; the CLI overrides them via flags a
 ```sh
 hugo --minify
 
-go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@latest
+go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@d39ef12d068d6028076d91eedf1a5f98abcd7b8d
 
 htmltrust-sign \
   --dir public \
@@ -156,10 +203,10 @@ Keep `signing-key.pem` private — in a password manager, a KMS, or a CI secret.
 - name: Setup Go
   uses: actions/setup-go@v5
   with:
-    go-version: '1.22'
+    go-version: '1.25'
 
 - name: Install htmltrust-sign
-  run: go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@latest
+  run: go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@d39ef12d068d6028076d91eedf1a5f98abcd7b8d
 
 - name: Sign content
   env:
