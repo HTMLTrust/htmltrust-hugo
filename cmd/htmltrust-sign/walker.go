@@ -14,13 +14,15 @@ import (
 )
 
 // SignerConfig holds the inputs the walker needs to fill in signed-section
-// attributes. Keyid and Algorithm override any values already on the element;
-// SignedAtFallback supplies a timestamp if the page didn't set one. Domain is
-// the legacy signing-payload field name; its value must be a serialized origin.
+// attributes. Keyid, Algorithm, and Scope override any values already on the
+// element. SignedAtFallback supplies a timestamp if the page didn't set one.
+// Domain is retained as the configuration field name; its value is the HTTPS
+// publication origin used to derive each page URL.
 type SignerConfig struct {
 	PrivateKey       ed25519.PrivateKey
 	Keyid            string
 	Algorithm        string // "ed25519" only for now
+	Scope            string // "url" or "origin"
 	Domain           string
 	BaseURL          string
 	SignedAtFallback time.Time // used if <meta name="signed-at"> absent
@@ -35,6 +37,12 @@ type SignerConfig struct {
 func SignHTML(input []byte, cfg SignerConfig) ([]byte, int, error) {
 	if cfg.Algorithm == "" {
 		cfg.Algorithm = "ed25519"
+	}
+	if cfg.Scope == "" {
+		cfg.Scope = "url"
+	}
+	if cfg.Scope != "url" && cfg.Scope != "origin" {
+		return nil, 0, fmt.Errorf("SignHTML: unsupported scope %q (want url or origin)", cfg.Scope)
 	}
 	if cfg.Algorithm != "ed25519" {
 		return nil, 0, fmt.Errorf("SignHTML: unsupported algorithm %q (only ed25519 supported)", cfg.Algorithm)
@@ -53,6 +61,9 @@ func SignHTML(input []byte, cfg SignerConfig) ([]byte, int, error) {
 		return nil, 0, fmt.Errorf("SignHTML: Domain must be a serialized origin or bare host: %w", err)
 	}
 	cfg.Domain = origin
+	if !strings.HasPrefix(origin, "https://") {
+		return nil, 0, errors.New("SignHTML: Domain must use HTTPS for the v1 signing profile")
+	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = origin + "/"
 	}
@@ -121,10 +132,16 @@ func signNode(n *html.Node, cfg SignerConfig) error {
 	if err != nil {
 		return fmt.Errorf("signNode: content hash: %w", err)
 	}
-	claimsHash := ClaimsHash(claims)
-	binding, err := canon.BuildSignatureBinding(contentHash, claimsHash, cfg.Domain, signedAt)
+	claimsHash, err := ClaimsHash(claims)
 	if err != nil {
-		return fmt.Errorf("signNode: build binding: %w", err)
+		return fmt.Errorf("signNode: claims hash: %w", err)
+	}
+	binding, err := canon.BuildSigningPayloadV1(canon.SigningProfileV1Input{
+		ContentHash: contentHash, ClaimsHash: claimsHash, DocumentURL: cfg.BaseURL,
+		Scope: cfg.Scope, KeyID: cfg.Keyid, Algorithm: cfg.Algorithm, SignedAt: signedAt,
+	})
+	if err != nil {
+		return fmt.Errorf("signNode: build v1 payload: %w", err)
 	}
 	signature := SignEd25519(binding, cfg.PrivateKey)
 
@@ -132,6 +149,8 @@ func signNode(n *html.Node, cfg SignerConfig) error {
 	setAttr(n, "signature", signature)
 	setAttr(n, "keyid", cfg.Keyid)
 	setAttr(n, "algorithm", cfg.Algorithm)
+	setAttr(n, "profile", canon.SigningProfileV1)
+	setAttr(n, "signature-scope", cfg.Scope)
 	delAttr(n, "data-htmltrust-placeholder")
 	return nil
 }

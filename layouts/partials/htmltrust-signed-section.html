@@ -1,19 +1,18 @@
 {{- /*
-htmltrust-signed-section.html — wraps .Content in a <signed-section> placeholder.
+htmltrust-signed-section.html wraps .Content in a <signed-section> placeholder.
 
 Spec-conformant cryptographic signing (content-hash + signature) is NOT performed
 in this template. Hugo cannot do NFKC normalization or Ed25519 signing. This
 partial emits a structural placeholder; the companion `htmltrust-sign` CLI fills
-in the four required attributes (content-hash, signature, keyid, algorithm)
-after `hugo build`.
+in the v1 profile, scope, and cryptographic attributes after the build.
 
 Opt in per-page via frontmatter:
 
   htmltrust:
     sign: true
     claims:
-      ContentType: "Article"
-      License: "CC-BY-4.0"
+      content-type: "Article"
+      license: "CC-BY-4.0"
 
 Site-level defaults (config.toml):
 
@@ -30,7 +29,7 @@ Site-level defaults (config.toml):
 {{- if not .Date.IsZero -}}
   {{- $signedAt = .Date.UTC.Format "2006-01-02T15:04:05Z" -}}
 {{- end -}}
-<signed-section content-hash="" signature="" keyid="{{ $keyid }}" algorithm="{{ $algo }}" data-htmltrust-placeholder="true" style="display: block;">
+<signed-section content-hash="" signature="" keyid="{{ $keyid }}" algorithm="{{ $algo }}" profile="htmltrust-signature-v1" signature-scope="url" data-htmltrust-placeholder="true" style="display: block;">
 {{- with $author }}
   <meta name="author" content="{{ . }}">
 {{- end }}

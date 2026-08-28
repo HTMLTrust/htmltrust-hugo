@@ -11,24 +11,25 @@ documents, or verify a site in the browser.
 
 The checkout currently builds with Go 1.25 and Hugo 0.128 or newer. Its Go
 module pins the canonicalization binding to the immutable commit
-`79b0d52fecd958f8fc7ade713fe0799ca1e79626`, corresponding to canonicalization
-release `v0.2.2`.
+`b0c8f305425de190a7f209ac117d34f88c2b1946`, the current HTMLTrust
+canonicalization v1 release candidate.
 
 | Component | Version or commit | Role |
 |---|---|---|
-| `htmltrust-hugo` | `d39ef12d068d6028076d91eedf1a5f98abcd7b8d` baseline | Hugo partial and signer |
-| Go canonicalization binding | `v0.0.0-20260827215642-79b0d52fecd9` | Unicode, HTML, claims, and URL canonicalization |
+| `htmltrust-hugo` | pin a reviewed commit from this repository | Hugo partial and signer |
+| Go canonicalization binding | `v0.0.0-20260828084755-b0c8f305425d` | HTMLTrust v1 Unicode, HTML, claims, and URL canonicalization |
 | Hugo | `0.128.0` or newer | Static-site build |
 | Go | `1.25` or newer | CLI build and tests |
 
-Pin both this module and its canonicalization dependency to reviewed commits
-when reproducing a release. Avoid branch names and moving version selectors in
-production builds.
+Pin this module and its canonicalization dependency to reviewed commits when
+reproducing a release. The dependency is currently a v1 release candidate;
+avoid branch names and moving version selectors in production builds.
 
-This module is the missing piece for actually-signed Hugo sites — not just content-hashed. It ships two things that work together:
+This module adds signatures to Hugo sites whose templates already identify the
+content to sign. It ships a Hugo partial and a post-build signer.
 
 1. **A Hugo Module** with a `<signed-section>` partial you drop into your templates. Build-time only emits the structural element with claims metadata.
-2. **A companion Go CLI** (`htmltrust-sign`) you run after `hugo build`. It does the parts Hugo templates genuinely can't: full Unicode canonicalization per the [HTMLTrust canonicalization spec](https://github.com/HTMLTrust/htmltrust-canonicalization) (NFKC, quote/dash/whitespace normalization, etc.), SHA-256 content hashing, and Ed25519 signing. It rewrites every `<signed-section>` in your `public/` directory with all four spec-required attributes: `content-hash`, `signature`, `keyid`, `algorithm`.
+2. **A companion Go CLI** (`htmltrust-sign`) you run after `hugo build`. It applies the [HTMLTrust canonicalization profile](https://github.com/HTMLTrust/htmltrust-canonicalization), computes the SHA-256 hashes, builds the v1 JSON payload, and signs it with Ed25519. It rewrites every `<signed-section>` in `public/` with the profile, scope, key, algorithm, content hash, and signature attributes.
 
 ## Why two pieces?
 
@@ -72,11 +73,11 @@ Initialize the module if you haven't:
 
 ```sh
 hugo mod init github.com/your-org/your-site
-hugo mod get github.com/HTMLTrust/htmltrust-hugo@d39ef12d068d6028076d91eedf1a5f98abcd7b8d
+hugo mod get github.com/HTMLTrust/htmltrust-hugo@<reviewed-commit>
 ```
 
 Run `hugo mod graph` after installation to confirm that the canonicalization
-dependency resolves to the v0.2.2 commit shown above.
+dependency resolves to the v1 commit shown above.
 
 ### 2. Wire the partial into your content template
 
@@ -120,12 +121,13 @@ These show up as defaults on the placeholder; the CLI overrides them via flags a
 ```sh
 hugo --minify
 
-go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@d39ef12d068d6028076d91eedf1a5f98abcd7b8d
+  go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@<reviewed-commit>
 
 htmltrust-sign \
   --dir public \
   --keyid did:web:jason-grey.com \
   --domain https://www.example.com \
+  --scope url \
   --keyfile $HOME/.htmltrust/signing-key.pem
 ```
 
@@ -142,8 +144,9 @@ htmltrust-sign --dir public --keyid did:web:jason-grey.com --domain https://www.
 |---|---|---|
 | `--dir` | `public` | Directory of built HTML files to scan. |
 | `--keyid` | _(required)_ | Identifier embedded in each `<signed-section>` and used by verifiers to fetch your public key. Standard form is `did:web:<host>`. |
-| `--domain` | _(required)_ | Publication origin for the signature binding, serialized as `scheme://host[:port]`. Bare hosts are accepted for compatibility and normalized to `https://host`. No path, query, fragment, or credentials. |
+| `--domain` | _(required)_ | HTTPS publication origin, serialized as `https://host[:port]`. Bare hosts are normalized to `https://host`. Paths, queries, fragments, and credentials are rejected. |
 | `--algorithm` | `ed25519` | Only `ed25519` is supported in this revision. |
+| `--scope` | `url` | Binds the signature to the page URL; `origin` permits same-origin reuse. |
 | `--keyfile` | _none_ | PEM-encoded PKCS#8 Ed25519 private key. Falls back to `HTMLTRUST_SIGNING_KEY` env var if unset. |
 | `--dry-run` | `false` | Report what would change without writing. |
 | `-v` | `false` | Print each file processed. |
@@ -158,6 +161,8 @@ After `hugo --minify` + `htmltrust-sign`:
     signature="0V7YTUfv0z2w9xhuPik9rBWPILZ9D5NHmF3ygqRlThHEPpjr55LoJ4hCddDL0FNn7wuqinfBK8OmCJIoDr7MCQ"
     keyid="did:web:jason-grey.com"
     algorithm="ed25519"
+    profile="htmltrust-signature-v1"
+    signature-scope="url"
     style="display: block;">
   <meta name="author" content="…">
   <meta name="signed-at" content="2026-05-12T20:00:00Z">
@@ -206,7 +211,7 @@ Keep `signing-key.pem` private — in a password manager, a KMS, or a CI secret.
     go-version: '1.25'
 
 - name: Install htmltrust-sign
-  run: go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@d39ef12d068d6028076d91eedf1a5f98abcd7b8d
+  run: go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@<reviewed-commit>
 
 - name: Sign content
   env:
@@ -226,19 +231,19 @@ Keep `signing-key.pem` private — in a password manager, a KMS, or a CI secret.
    1. Reads every direct child `<meta name="..." content="...">` claim, including `author`, `signed-at`, and `claim:*` entries.
    2. Renders the inner HTML (everything between the tags) and canonicalizes signed content locally using the same Unicode normalization rules as [htmltrust-canonicalization/go](https://github.com/HTMLTrust/htmltrust-canonicalization). Direct child claim `<meta>` elements and excluded elements are omitted from content, while signed semantic attributes `href`, `src`, `alt`, and `aria-label` are included.
    3. Computes `content-hash = "sha256:" + RawStdBase64(sha256(canonical_text))`.
-   4. Serializes the claims as sorted `name:content\n` records and hashes them the same way.
-   5. Builds the spec binding string `{content-hash}:{claims-hash}:{domain}:{signed-at}` via `canonicalize.BuildSignatureBinding`.
-   6. Signs the binding with the Ed25519 private key.
-   7. Rewrites the four required attributes and removes the placeholder marker.
+   4. Serializes the claims with the v1 escaping rules as sorted `name:content\n` records and hashes them the same way.
+   5. Builds the RFC 8785 JSON signing payload with `canonicalize.BuildSigningPayloadV1`, binding the page URL and selected scope.
+   6. Signs the payload with the Ed25519 private key.
+   7. Rewrites the v1 profile, scope, and cryptographic attributes and removes the placeholder marker.
 
 ## Spec conformance
 
 - **Canonicalization:** uses [htmltrust-canonicalization/go](https://github.com/HTMLTrust/htmltrust-canonicalization) for Unicode text normalization and local DOM walking for the current signed semantic attribute and direct-child claim rules.
 - **Hash + signature encoding:** canonical unpadded standard Base64 (`base64.RawStdEncoding`).
-- **Binding format:** `{content-hash}:{claims-hash}:{domain}:{signed-at}` per spec §2.1. The legacy `domain` field carries the serialized publication origin.
+- **Signing payload:** RFC 8785 canonical JSON from `BuildSigningPayloadV1`, with URL or origin location derived from the page URL.
 - **Claim coverage:** every direct child `<meta name content>` claim is signed, including `author`, `signed-at`, and `claim:*`.
 - **Semantic attribute coverage:** `href`, `src`, `alt`, and `aria-label` on included descendants contribute to the content hash.
-- **Required attributes:** all four (`content-hash`, `signature`, `keyid`, `algorithm`) are emitted on every signed section.
+- **Required attributes:** v1 `profile`, `signature-scope`, `keyid`, `algorithm`, `content-hash`, and `signature` are emitted on every signed section.
 
 Verification against this signer's output is round-tripped against `canonicalize.VerifySignature` in the test suite.
 
