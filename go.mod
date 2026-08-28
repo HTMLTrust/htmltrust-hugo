@@ -3,7 +3,7 @@ module github.com/HTMLTrust/htmltrust-hugo
 go 1.25.0
 
 require (
-	github.com/HTMLTrust/htmltrust-canonicalization/go v0.0.0-20260828102949-5e51040dcaaf
+	github.com/HTMLTrust/htmltrust-canonicalization/go v0.0.0-20260828183729-760593d4a02e
 	golang.org/x/net v0.55.0
 )
 

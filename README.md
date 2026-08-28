@@ -11,13 +11,13 @@ outside this repository.
 
 The checkout currently builds with Go 1.25 and Hugo 0.128 or newer. Its Go
 module pins the canonicalization binding to the immutable commit
-`5e51040dcaaf50935e245702bdefbc18a1d542ce`, the current HTMLTrust
+`760593d4a02e9fffa56dc4d002eb52ab2ade1b49`, the current HTMLTrust
 canonicalization v1 release candidate.
 
 | Component | Version or commit | Role |
 |---|---|---|
 | `htmltrust-hugo` | pin a reviewed commit from this repository | Hugo partial and signer |
-| Go canonicalization binding | `v0.0.0-20260828102949-5e51040dcaaf` | HTMLTrust v1 Unicode, HTML, claims, and URL canonicalization |
+| Go canonicalization binding | `v0.0.0-20260828183729-760593d4a02e` | HTMLTrust v1 Unicode, HTML, claims, and URL canonicalization |
 | Hugo | `0.128.0` or newer | Static-site build |
 | Go | `1.25` or newer | CLI build and tests |
 
