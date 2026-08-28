@@ -25,10 +25,11 @@ Pin this module and its canonicalization dependency to reviewed commits when
 reproducing a release. The dependency is currently a v1 release candidate;
 avoid branch names and moving version selectors in production builds.
 
-This module is the missing piece for actually-signed Hugo sites — not just content-hashed. It ships two things that work together:
+This module adds signatures to Hugo sites whose templates already identify the
+content to sign. It ships a Hugo partial and a post-build signer.
 
 1. **A Hugo Module** with a `<signed-section>` partial you drop into your templates. Build-time only emits the structural element with claims metadata.
-2. **A companion Go CLI** (`htmltrust-sign`) you run after `hugo build`. It does the parts Hugo templates genuinely can't: full Unicode canonicalization per the [HTMLTrust canonicalization spec](https://github.com/HTMLTrust/htmltrust-canonicalization) (NFKC, quote/dash/whitespace normalization, etc.), SHA-256 content hashing, and Ed25519 signing. It rewrites every `<signed-section>` in your `public/` directory with all four spec-required attributes: `content-hash`, `signature`, `keyid`, `algorithm`.
+2. **A companion Go CLI** (`htmltrust-sign`) you run after `hugo build`. It applies the [HTMLTrust canonicalization profile](https://github.com/HTMLTrust/htmltrust-canonicalization), computes the SHA-256 hashes, builds the v1 JSON payload, and signs it with Ed25519. It rewrites every `<signed-section>` in `public/` with the profile, scope, key, algorithm, content hash, and signature attributes.
 
 ## Why two pieces?
 
@@ -143,7 +144,7 @@ htmltrust-sign --dir public --keyid did:web:jason-grey.com --domain https://www.
 |---|---|---|
 | `--dir` | `public` | Directory of built HTML files to scan. |
 | `--keyid` | _(required)_ | Identifier embedded in each `<signed-section>` and used by verifiers to fetch your public key. Standard form is `did:web:<host>`. |
-| `--domain` | _(required)_ | Publication origin for the signature binding, serialized as `scheme://host[:port]`. Bare hosts are accepted for compatibility and normalized to `https://host`. No path, query, fragment, or credentials. |
+| `--domain` | _(required)_ | HTTPS publication origin, serialized as `https://host[:port]`. Bare hosts are normalized to `https://host`. Paths, queries, fragments, and credentials are rejected. |
 | `--algorithm` | `ed25519` | Only `ed25519` is supported in this revision. |
 | `--scope` | `url` | Binds the signature to the page URL; `origin` permits same-origin reuse. |
 | `--keyfile` | _none_ | PEM-encoded PKCS#8 Ed25519 private key. Falls back to `HTMLTRUST_SIGNING_KEY` env var if unset. |

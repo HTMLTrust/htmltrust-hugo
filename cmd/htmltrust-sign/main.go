@@ -37,8 +37,8 @@ func run(args []string) error {
 	fs := flag.NewFlagSet("htmltrust-sign", flag.ContinueOnError)
 	var (
 		dir       = fs.String("dir", "public", "directory of built HTML files to scan")
-		keyid     = fs.String("keyid", "", "keyid to embed (e.g. did:web:jason-grey.com) — required")
-		domain    = fs.String("domain", "", "publication origin for the signature binding (e.g. https://www.htmltrust.org). Bare hosts are normalized to https origins for compatibility — required")
+		keyid     = fs.String("keyid", "", "required keyid to embed (for example, did:web:jason-grey.com)")
+		domain    = fs.String("domain", "", "required HTTPS publication origin (for example, https://www.htmltrust.org); bare hosts are normalized to HTTPS")
 		scope     = fs.String("scope", "url", "signature location scope: url or origin")
 		algorithm = fs.String("algorithm", "ed25519", "signature algorithm (only ed25519 supported)")
 		keyfile   = fs.String("keyfile", "", "PEM-encoded PKCS#8 Ed25519 private key file (or set HTMLTRUST_SIGNING_KEY env var)")
@@ -57,6 +57,9 @@ func run(args []string) error {
 	origin, err := normalizeOrigin(*domain)
 	if err != nil {
 		return fmt.Errorf("--domain must be a serialized Web origin or bare host: %w", err)
+	}
+	if !strings.HasPrefix(origin, "https://") {
+		return fmt.Errorf("--domain must use HTTPS for the v1 signing profile")
 	}
 
 	pemBytes, err := loadKeyMaterial(*keyfile)
@@ -121,7 +124,7 @@ func run(args []string) error {
 	}
 	fmt.Printf("htmltrust-sign: signed %d section(s) across %d file(s)\n", totalSigned, totalFiles)
 	if totalSigned == 0 {
-		return fmt.Errorf("no <signed-section> elements found — is the Hugo partial wired up?")
+		return fmt.Errorf("no <signed-section> elements found; is the Hugo partial wired up?")
 	}
 	return nil
 }

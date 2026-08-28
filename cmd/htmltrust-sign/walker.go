@@ -14,9 +14,10 @@ import (
 )
 
 // SignerConfig holds the inputs the walker needs to fill in signed-section
-// attributes. Keyid and Algorithm override any values already on the element;
-// SignedAtFallback supplies a timestamp if the page didn't set one. Domain is
-// the legacy signing-payload field name; its value must be a serialized origin.
+// attributes. Keyid, Algorithm, and Scope override any values already on the
+// element. SignedAtFallback supplies a timestamp if the page didn't set one.
+// Domain is retained as the configuration field name; its value is the HTTPS
+// publication origin used to derive each page URL.
 type SignerConfig struct {
 	PrivateKey       ed25519.PrivateKey
 	Keyid            string
@@ -38,7 +39,7 @@ func SignHTML(input []byte, cfg SignerConfig) ([]byte, int, error) {
 		cfg.Algorithm = "ed25519"
 	}
 	if cfg.Scope == "" {
-		cfg.Scope = "origin"
+		cfg.Scope = "url"
 	}
 	if cfg.Scope != "url" && cfg.Scope != "origin" {
 		return nil, 0, fmt.Errorf("SignHTML: unsupported scope %q (want url or origin)", cfg.Scope)
@@ -60,6 +61,9 @@ func SignHTML(input []byte, cfg SignerConfig) ([]byte, int, error) {
 		return nil, 0, fmt.Errorf("SignHTML: Domain must be a serialized origin or bare host: %w", err)
 	}
 	cfg.Domain = origin
+	if !strings.HasPrefix(origin, "https://") {
+		return nil, 0, errors.New("SignHTML: Domain must use HTTPS for the v1 signing profile")
+	}
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = origin + "/"
 	}

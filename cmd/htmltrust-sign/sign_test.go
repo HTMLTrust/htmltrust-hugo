@@ -12,6 +12,26 @@ import (
 	canon "github.com/HTMLTrust/htmltrust-canonicalization/go"
 )
 
+func TestDocumentBaseURL(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{path: "public/index.html", want: "https://example.com/"},
+		{path: "public/posts/hello/index.html", want: "https://example.com/posts/hello/"},
+		{path: "public/404.html", want: "https://example.com/404.html"},
+	}
+	for _, tt := range tests {
+		got, err := documentBaseURL("https://example.com", "public", tt.path)
+		if err != nil {
+			t.Fatalf("documentBaseURL(%q): %v", tt.path, err)
+		}
+		if got != tt.want {
+			t.Errorf("documentBaseURL(%q) = %q, want %q", tt.path, got, tt.want)
+		}
+	}
+}
+
 func TestHashSHA256B64_PrefixedAndUnpadded(t *testing.T) {
 	h := hashSHA256B64("hello world")
 	if !strings.HasPrefix(h, "sha256:") {

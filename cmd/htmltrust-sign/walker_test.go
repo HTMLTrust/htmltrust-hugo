@@ -53,7 +53,7 @@ func TestSignHTML_FillsAllRequiredAttrs(t *testing.T) {
 		`keyid="did:web:jason-grey.com"`,
 		`algorithm="ed25519"`,
 		`profile="htmltrust-signature-v1"`,
-		`signature-scope="origin"`,
+		`signature-scope="url"`,
 		`content-hash="sha256:`,
 		`signature="`,
 	} {
@@ -78,7 +78,7 @@ func TestSignHTML_FillsAllRequiredAttrs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimsHash: %v", err)
 	}
-	binding, err := canon.BuildSigningPayloadV1(canon.SigningProfileV1Input{ContentHash: contentHash, ClaimsHash: claimsHash, DocumentURL: "https://www.htmltrust.org/", Scope: "origin", KeyID: "did:web:jason-grey.com", Algorithm: "ed25519", SignedAt: "2026-05-12T20:00:00Z"})
+	binding, err := canon.BuildSigningPayloadV1(canon.SigningProfileV1Input{ContentHash: contentHash, ClaimsHash: claimsHash, DocumentURL: "https://www.htmltrust.org/", Scope: "url", KeyID: "did:web:jason-grey.com", Algorithm: "ed25519", SignedAt: "2026-05-12T20:00:00Z"})
 	if err != nil {
 		t.Fatalf("BuildSignatureBinding: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestSignHTML_NormalizesBareDomainToOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimsHash: %v", err)
 	}
-	binding, err := canon.BuildSigningPayloadV1(canon.SigningProfileV1Input{ContentHash: contentHash, ClaimsHash: claimsHash, DocumentURL: "https://www.htmltrust.org/", Scope: "origin", KeyID: "did:web:jason-grey.com", Algorithm: "ed25519", SignedAt: "2026-05-12T20:00:00Z"})
+	binding, err := canon.BuildSigningPayloadV1(canon.SigningProfileV1Input{ContentHash: contentHash, ClaimsHash: claimsHash, DocumentURL: "https://www.htmltrust.org/", Scope: "url", KeyID: "did:web:jason-grey.com", Algorithm: "ed25519", SignedAt: "2026-05-12T20:00:00Z"})
 	if err != nil {
 		t.Fatalf("BuildSignatureBinding: %v", err)
 	}
@@ -215,6 +215,55 @@ func TestSignHTML_RejectsOriginWithPath(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("expected origin with path to fail")
+	}
+}
+
+func TestSignHTML_RejectsHTTPOriginForV1(t *testing.T) {
+	_, priv, _ := testKey(t)
+	input := []byte(`<html><body><signed-section><meta name="signed-at" content="2026-05-12T20:00:00Z"><p>x</p></signed-section></body></html>`)
+	_, _, err := SignHTML(input, SignerConfig{
+		PrivateKey: priv,
+		Keyid:      "did:web:jason-grey.com",
+		Domain:     "http://www.htmltrust.org",
+	})
+	if err == nil || !strings.Contains(err.Error(), "must use HTTPS") {
+		t.Fatalf("expected an HTTPS requirement error, got %v", err)
+	}
+}
+
+func TestSignHTML_SupportsOriginScope(t *testing.T) {
+	_, priv, pubPEM := testKey(t)
+	input := []byte(`<html><body><signed-section><meta name="signed-at" content="2026-05-12T20:00:00Z"><p>x</p></signed-section></body></html>`)
+	out, _, err := SignHTML(input, SignerConfig{
+		PrivateKey: priv,
+		Keyid:      "did:web:jason-grey.com",
+		Domain:     "https://www.htmltrust.org",
+		BaseURL:    "https://www.htmltrust.org/posts/one/",
+		Scope:      "origin",
+	})
+	if err != nil {
+		t.Fatalf("SignHTML: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, `signature-scope="origin"`) {
+		t.Fatalf("output missing origin scope: %s", s)
+	}
+	contentHash := mustGrepAttr(t, s, "content-hash")
+	claimsHash, err := ClaimsHash(map[string]string{"signed-at": "2026-05-12T20:00:00Z"})
+	if err != nil {
+		t.Fatalf("ClaimsHash: %v", err)
+	}
+	payload, err := canon.BuildSigningPayloadV1(canon.SigningProfileV1Input{
+		ContentHash: contentHash, ClaimsHash: claimsHash,
+		DocumentURL: "https://www.htmltrust.org/posts/one/", Scope: "origin",
+		KeyID: "did:web:jason-grey.com", Algorithm: "ed25519", SignedAt: "2026-05-12T20:00:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSigningPayloadV1: %v", err)
+	}
+	ok, err := canon.VerifySignature(payload, mustGrepAttr(t, s, "signature"), pubPEM, "ed25519")
+	if err != nil || !ok {
+		t.Fatalf("origin-scope signature verification = %v, %v", ok, err)
 	}
 }
 
@@ -246,7 +295,7 @@ func TestSignHTML_SignsAuthorSignedAtAndClaimMeta(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimsHash: %v", err)
 	}
-	binding, err := canon.BuildSigningPayloadV1(canon.SigningProfileV1Input{ContentHash: contentHash, ClaimsHash: claimsHash, DocumentURL: "https://www.htmltrust.org/", Scope: "origin", KeyID: "did:web:jason-grey.com", Algorithm: "ed25519", SignedAt: "2026-05-12T20:00:00Z"})
+	binding, err := canon.BuildSigningPayloadV1(canon.SigningProfileV1Input{ContentHash: contentHash, ClaimsHash: claimsHash, DocumentURL: "https://www.htmltrust.org/", Scope: "url", KeyID: "did:web:jason-grey.com", Algorithm: "ed25519", SignedAt: "2026-05-12T20:00:00Z"})
 	if err != nil {
 		t.Fatalf("BuildSignatureBinding: %v", err)
 	}
