@@ -5,9 +5,9 @@ Spec-conformant HTMLTrust content signing for [Hugo](https://gohugo.io/) static 
 ## Project status and compatibility
 
 This repository is the Hugo module and post-build signer reference
-implementation. It is usable for sites that opt into the `signed-section`
-partial. The CLI signs generated HTML; it does not manage keys, publish DID
-documents, or verify a site in the browser.
+implementation. Sites opt into the `signed-section` partial. The CLI signs
+generated HTML. Key management, DID publication, and browser verification are
+outside this repository.
 
 The checkout currently builds with Go 1.25 and Hugo 0.128 or newer. Its Go
 module pins the canonicalization binding to the immutable commit
@@ -25,8 +25,8 @@ Pin this module and its canonicalization dependency to reviewed commits when
 reproducing a release. The dependency is currently a v1 release candidate;
 avoid branch names and moving version selectors in production builds.
 
-This module adds signatures to Hugo sites whose templates already identify the
-content to sign. It ships a Hugo partial and a post-build signer.
+This module adds signatures to Hugo sites whose templates identify the content
+to sign. It ships a Hugo partial and a post-build signer.
 
 1. **A Hugo Module** with a `<signed-section>` partial you drop into your templates. Build-time only emits the structural element with claims metadata.
 2. **A companion Go CLI** (`htmltrust-sign`) you run after `hugo build`. It applies the [HTMLTrust canonicalization profile](https://github.com/HTMLTrust/htmltrust-canonicalization), computes the SHA-256 hashes, builds the v1 JSON payload, and signs it with Ed25519. It rewrites every `<signed-section>` in `public/` with the profile, scope, key, algorithm, content hash, and signature attributes.
@@ -45,6 +45,15 @@ cd htmltrust-hugo
 go test ./...
 go vet ./...
 go build ./cmd/htmltrust-sign
+go build ./cmd/htmltrust-preflight
+```
+
+The module checkout has no content site to render. In a consuming site, check
+the Hugo version and validate a build with:
+
+```sh
+hugo version
+hugo --minify --destination public
 ```
 
 To run the optional cross-repository vector check, place the canonicalization
@@ -77,7 +86,17 @@ hugo mod get github.com/HTMLTrust/htmltrust-hugo@<reviewed-commit>
 ```
 
 Run `hugo mod graph` after installation to confirm that the canonicalization
-dependency resolves to the v1 commit shown above.
+dependency resolves to the reviewed v1 version shown above. Replace every
+`<reviewed-commit>` below with a full 40-character SHA that you inspected.
+Resolve a branch or tag once, then pin that SHA in the site or CI:
+
+```sh
+HUGO_URL=https://github.com/HTMLTrust/htmltrust-hugo.git
+HUGO_REF=REPLACE_WITH_REVIEWED_TAG
+HUGO_SHA="$(git ls-remote "$HUGO_URL" "refs/tags/$HUGO_REF" | awk 'NR==1 {print $1}')"
+test "$HUGO_SHA" && test "${#HUGO_SHA}" -eq 40
+hugo mod get "github.com/HTMLTrust/htmltrust-hugo@$HUGO_SHA"
+```
 
 ### 2. Wire the partial into your content template
 
@@ -104,7 +123,7 @@ htmltrust:
 ---
 ```
 
-> **Note on claim casing.** Hugo lowercases frontmatter keys when parsing. To avoid surprises, use lowercase-with-hyphens for claim names (`content-type`, not `ContentType`). The hash is case-sensitive — what you write is what gets signed.
+> **Note on claim casing.** Hugo lowercases frontmatter keys when parsing. Use lowercase-with-hyphens for claim names such as `content-type`. The hash is case-sensitive, so the written value is signed.
 
 ### 4. Set site-level defaults (optional)
 
@@ -119,7 +138,8 @@ These show up as defaults on the placeholder; the CLI overrides them via flags a
 ## Sign at build time
 
 ```sh
-hugo --minify
+hugo version
+hugo --minify --destination public
 
   go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@<reviewed-commit>
 
@@ -136,6 +156,58 @@ Or with the private key in an env var (typical for CI):
 ```sh
 export HTMLTRUST_SIGNING_KEY="$(cat path/to/key.pem)"
 htmltrust-sign --dir public --keyid did:web:jason-grey.com --domain https://www.example.com
+```
+
+## Preflight generated pages before publication
+
+Run the preflight adapter after Hugo renders `public/` and before the signer
+writes cryptographic attributes:
+
+```sh
+hugo version
+hugo --minify --destination public
+go run ./cmd/htmltrust-preflight \
+  --dir public \
+  --domain https://www.example.com \
+  --strict \
+  --json > htmltrust-preflight.json
+htmltrust-sign \
+  --dir public \
+  --keyid did:web:jason-grey.com \
+  --domain https://www.example.com \
+  --keyfile "$HOME/.htmltrust/signing-key.pem"
+```
+
+`--domain` is the publication origin. The adapter derives each page URL from
+the generated path (`index.html` becomes the directory URL), then resolves
+the first `<base href>` in tree order against that final page URL. Later base
+elements are ignored. A malformed, `data:`, or `javascript:` first base falls
+back to the final page URL. An HTTP or credential-bearing first base remains
+the document base, so relative signed URLs fail the HTMLTrust safe-URL check.
+Relative `href` and `src` values inside a signed region therefore get the same
+base treatment as the signer.
+
+The JSON report contains one result per generated HTML file and one result per
+signed region. Each region includes canonical content, canonical claims, a
+DOM path, and diagnostics with stable `code`, `hint`, and `context` fields.
+Pages without a signed region carry a warning and remain successful, which
+allows sites to sign only selected templates. With `--strict`, any failed
+signed region exits with status `1`, so CI can stop before publication.
+
+For an installed binary, use the same command after building it:
+
+```sh
+go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-preflight@<reviewed-commit>
+htmltrust-preflight --dir public --domain https://www.example.com --strict --json
+```
+
+The reusable Go API is in the `preflight` package:
+
+```go
+import "github.com/HTMLTrust/htmltrust-hugo/preflight"
+
+report := preflight.PreflightHTML(pageBytes, "https://www.example.com/articles/intro/")
+directory, err := preflight.PreflightDirectory("public", "https://www.example.com")
 ```
 
 ### Flags
@@ -200,7 +272,7 @@ Publish the public key as a `did:web` document at `https://your-domain/.well-kno
 }
 ```
 
-Keep `signing-key.pem` private — in a password manager, a KMS, or a CI secret. **Never commit it.**
+Keep `signing-key.pem` in a password manager, KMS, or CI secret. Never commit it.
 
 ## CI integration (GitHub Actions example)
 
@@ -254,9 +326,9 @@ This project is licensed under the [PolyForm Noncommercial License 1.0.0](https:
 
 ## Origin & Contributions
 
-HTMLTrust is an idea I (Jason Grey) have been chewing on since 2024. I'm not an academic — I'm an engineer with a day job and a family — so the spec, the reference implementations, and most of this prose have been written with significant help from AI tools acting as research assistant, technical writer, and pair programmer. I wrote the original architectural sketches and reviewed every line; the assistants filled in the gaps and saved me from re-typing the same explanation for the hundredth time.
+HTMLTrust is an idea I (Jason Grey) have been developing since 2024. The spec, reference implementations, and much of this prose were written with help from AI tools. I wrote the original architectural sketches and reviewed the result.
 
-**Contributions are welcome — human or AI-assisted, doesn't matter to me.** What matters is whether the code, the spec text, or the conformance vectors move the project forward. Open a PR.
+**Contributions are welcome, whether human or AI-assisted.** Open a PR with code, spec text, or conformance vectors that move the project forward.
 
 What this project is **not** a forum for:
 
@@ -264,6 +336,6 @@ What this project is **not** a forum for:
 - Opinions on who is or isn't trustworthy on the web.
 - Politics, religion, professional practice, or personal philosophy.
 
-HTMLTrust is a mechanism — a way for *anyone* to sign content they publish and for *anyone* to decide whom they trust, on their own terms. The project takes no position on what the right answers are; it just provides the tools. If you want to debate the answers, there are entire continents of the internet better suited to it.
+HTMLTrust is a mechanism for signing published content and letting each reader choose whom to trust. The project provides the tools and does not prescribe those trust decisions.
 
 If this work is useful to you and you'd like to support it, see [GitHub Sponsors](https://github.com/sponsors/jt55401) or the other channels in [`.github/FUNDING.yml`](.github/FUNDING.yml).
