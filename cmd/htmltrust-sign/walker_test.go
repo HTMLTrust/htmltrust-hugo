@@ -72,7 +72,10 @@ func TestSignHTML_FillsAllRequiredAttrs(t *testing.T) {
 		"signed-at":         "2026-05-12T20:00:00Z",
 		"claim:ContentType": "Article",
 	}
-	claimsHash := ClaimsHash(claims)
+	claimsHash, err := ClaimsHash(claims)
+	if err != nil {
+		t.Fatalf("ClaimsHash: %v", err)
+	}
 	binding, err := canon.BuildSignatureBinding(contentHash, claimsHash, "https://www.htmltrust.org", "2026-05-12T20:00:00Z")
 	if err != nil {
 		t.Fatalf("BuildSignatureBinding: %v", err)
@@ -183,7 +186,10 @@ func TestSignHTML_NormalizesBareDomainToOrigin(t *testing.T) {
 	s := string(out)
 	contentHash := mustGrepAttr(t, s, "content-hash")
 	signature := mustGrepAttr(t, s, "signature")
-	claimsHash := ClaimsHash(map[string]string{"signed-at": "2026-05-12T20:00:00Z"})
+	claimsHash, err := ClaimsHash(map[string]string{"signed-at": "2026-05-12T20:00:00Z"})
+	if err != nil {
+		t.Fatalf("ClaimsHash: %v", err)
+	}
 	binding, err := canon.BuildSignatureBinding(contentHash, claimsHash, "https://www.htmltrust.org", "2026-05-12T20:00:00Z")
 	if err != nil {
 		t.Fatalf("BuildSignatureBinding: %v", err)
@@ -230,11 +236,14 @@ func TestSignHTML_SignsAuthorSignedAtAndClaimMeta(t *testing.T) {
 	s := string(out)
 	contentHash := mustGrepAttr(t, s, "content-hash")
 	signature := mustGrepAttr(t, s, "signature")
-	claimsHash := ClaimsHash(map[string]string{
+	claimsHash, err := ClaimsHash(map[string]string{
 		"author":        "Alice Example",
 		"signed-at":     "2026-05-12T20:00:00Z",
 		"claim:License": "CC-BY-4.0",
 	})
+	if err != nil {
+		t.Fatalf("ClaimsHash: %v", err)
+	}
 	binding, err := canon.BuildSignatureBinding(contentHash, claimsHash, "https://www.htmltrust.org", "2026-05-12T20:00:00Z")
 	if err != nil {
 		t.Fatalf("BuildSignatureBinding: %v", err)

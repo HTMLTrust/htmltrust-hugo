@@ -40,8 +40,12 @@ func ContentHash(innerHTML string, baseURL ...string) (string, error) {
 // ClaimsHash returns the spec-conformant claims-hash for a map of claim
 // name->value pairs. Claims are canonicalized (sorted by name, normalized,
 // joined with newlines) before hashing.
-func ClaimsHash(claims map[string]string) string {
-	return hashSHA256B64(CanonicalizeClaims(claims))
+func ClaimsHash(claims map[string]string) (string, error) {
+	canonical, err := CanonicalizeClaims(claims)
+	if err != nil {
+		return "", fmt.Errorf("ClaimsHash: canonical claims: %w", err)
+	}
+	return hashSHA256B64(canonical), nil
 }
 
 // SignEd25519 signs the binding string with an Ed25519 private key and returns
@@ -72,7 +76,7 @@ func LoadEd25519PrivateKey(pemBytes []byte) (ed25519.PrivateKey, error) {
 // "name:content\n", sorted by normalized claim name. It delegates to the
 // shared canonicalization library so the signer and the reference verifiers
 // produce byte-identical claims bytes.
-func CanonicalizeClaims(claims map[string]string) string {
+func CanonicalizeClaims(claims map[string]string) (string, error) {
 	return canon.CanonicalizeClaims(claims)
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -10,8 +11,22 @@ import (
 // content-hash and claims-hash as the shared reference test vector — i.e. it
 // now interoperates with the browser-client / Go verifiers (P0 fix).
 func TestSignerReproducesVector(t *testing.T) {
-	const path = "../../../htmltrust-canonicalization/conformance/vectors/vector-01.json"
-	raw, err := os.ReadFile(path)
+	// The optional checkout is a sibling of htmltrust-hugo. Go may run the test
+	// binary from either the module root or the package directory, so try both
+	// locations rather than baking in one working-directory assumption.
+	candidates := []string{
+		filepath.Join("..", "htmltrust-canonicalization", "conformance", "vectors", "vector-01.json"),
+		filepath.Join("..", "..", "htmltrust-canonicalization", "conformance", "vectors", "vector-01.json"),
+		filepath.Join("..", "..", "..", "htmltrust-canonicalization", "conformance", "vectors", "vector-01.json"),
+	}
+	var raw []byte
+	var err error
+	for _, candidate := range candidates {
+		raw, err = os.ReadFile(candidate)
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
 		t.Skipf("vector not found (%v); skipping cross-repo interop check", err)
 	}
@@ -34,7 +49,11 @@ func TestSignerReproducesVector(t *testing.T) {
 	if got != v.ContentHash {
 		t.Errorf("contentHash: signer produced %s, verifiers expect %s", got, v.ContentHash)
 	}
-	if ch := ClaimsHash(v.Claims); ch != v.ClaimsHash {
+	ch, err := ClaimsHash(v.Claims)
+	if err != nil {
+		t.Fatalf("ClaimsHash: %v", err)
+	}
+	if ch != v.ClaimsHash {
 		t.Errorf("claimsHash: signer produced %s, verifiers expect %s", ch, v.ClaimsHash)
 	}
 }

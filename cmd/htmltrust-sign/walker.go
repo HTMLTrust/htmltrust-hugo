@@ -121,7 +121,10 @@ func signNode(n *html.Node, cfg SignerConfig) error {
 	if err != nil {
 		return fmt.Errorf("signNode: content hash: %w", err)
 	}
-	claimsHash := ClaimsHash(claims)
+	claimsHash, err := ClaimsHash(claims)
+	if err != nil {
+		return fmt.Errorf("signNode: claims hash: %w", err)
+	}
 	binding, err := canon.BuildSignatureBinding(contentHash, claimsHash, cfg.Domain, signedAt)
 	if err != nil {
 		return fmt.Errorf("signNode: build binding: %w", err)

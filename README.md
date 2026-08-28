@@ -11,19 +11,19 @@ documents, or verify a site in the browser.
 
 The checkout currently builds with Go 1.25 and Hugo 0.128 or newer. Its Go
 module pins the canonicalization binding to the immutable commit
-`79b0d52fecd958f8fc7ade713fe0799ca1e79626`, corresponding to canonicalization
-release `v0.2.2`.
+`b0c8f305425de190a7f209ac117d34f88c2b1946`, the current HTMLTrust
+canonicalization v1 release candidate.
 
 | Component | Version or commit | Role |
 |---|---|---|
-| `htmltrust-hugo` | `d39ef12d068d6028076d91eedf1a5f98abcd7b8d` baseline | Hugo partial and signer |
-| Go canonicalization binding | `v0.0.0-20260827215642-79b0d52fecd9` | Unicode, HTML, claims, and URL canonicalization |
+| `htmltrust-hugo` | pin a reviewed commit from this repository | Hugo partial and signer |
+| Go canonicalization binding | `v0.0.0-20260828084755-b0c8f305425d` | HTMLTrust v1 Unicode, HTML, claims, and URL canonicalization |
 | Hugo | `0.128.0` or newer | Static-site build |
 | Go | `1.25` or newer | CLI build and tests |
 
-Pin both this module and its canonicalization dependency to reviewed commits
-when reproducing a release. Avoid branch names and moving version selectors in
-production builds.
+Pin this module and its canonicalization dependency to reviewed commits when
+reproducing a release. The dependency is currently a v1 release candidate;
+avoid branch names and moving version selectors in production builds.
 
 This module is the missing piece for actually-signed Hugo sites — not just content-hashed. It ships two things that work together:
 
@@ -72,11 +72,11 @@ Initialize the module if you haven't:
 
 ```sh
 hugo mod init github.com/your-org/your-site
-hugo mod get github.com/HTMLTrust/htmltrust-hugo@d39ef12d068d6028076d91eedf1a5f98abcd7b8d
+hugo mod get github.com/HTMLTrust/htmltrust-hugo@<reviewed-commit>
 ```
 
 Run `hugo mod graph` after installation to confirm that the canonicalization
-dependency resolves to the v0.2.2 commit shown above.
+dependency resolves to the v1 commit shown above.
 
 ### 2. Wire the partial into your content template
 
@@ -120,7 +120,7 @@ These show up as defaults on the placeholder; the CLI overrides them via flags a
 ```sh
 hugo --minify
 
-go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@d39ef12d068d6028076d91eedf1a5f98abcd7b8d
+  go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@<reviewed-commit>
 
 htmltrust-sign \
   --dir public \
@@ -206,7 +206,7 @@ Keep `signing-key.pem` private — in a password manager, a KMS, or a CI secret.
     go-version: '1.25'
 
 - name: Install htmltrust-sign
-  run: go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@d39ef12d068d6028076d91eedf1a5f98abcd7b8d
+  run: go install github.com/HTMLTrust/htmltrust-hugo/cmd/htmltrust-sign@<reviewed-commit>
 
 - name: Sign content
   env:
@@ -226,7 +226,7 @@ Keep `signing-key.pem` private — in a password manager, a KMS, or a CI secret.
    1. Reads every direct child `<meta name="..." content="...">` claim, including `author`, `signed-at`, and `claim:*` entries.
    2. Renders the inner HTML (everything between the tags) and canonicalizes signed content locally using the same Unicode normalization rules as [htmltrust-canonicalization/go](https://github.com/HTMLTrust/htmltrust-canonicalization). Direct child claim `<meta>` elements and excluded elements are omitted from content, while signed semantic attributes `href`, `src`, `alt`, and `aria-label` are included.
    3. Computes `content-hash = "sha256:" + RawStdBase64(sha256(canonical_text))`.
-   4. Serializes the claims as sorted `name:content\n` records and hashes them the same way.
+   4. Serializes the claims with the v1 escaping rules as sorted `name:content\n` records and hashes them the same way.
    5. Builds the spec binding string `{content-hash}:{claims-hash}:{domain}:{signed-at}` via `canonicalize.BuildSignatureBinding`.
    6. Signs the binding with the Ed25519 private key.
    7. Rewrites the four required attributes and removes the placeholder marker.
