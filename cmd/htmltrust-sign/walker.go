@@ -21,6 +21,7 @@ type SignerConfig struct {
 	PrivateKey       ed25519.PrivateKey
 	Keyid            string
 	Algorithm        string // "ed25519" only for now
+	Scope            string // "url" or "origin"
 	Domain           string
 	BaseURL          string
 	SignedAtFallback time.Time // used if <meta name="signed-at"> absent
@@ -35,6 +36,12 @@ type SignerConfig struct {
 func SignHTML(input []byte, cfg SignerConfig) ([]byte, int, error) {
 	if cfg.Algorithm == "" {
 		cfg.Algorithm = "ed25519"
+	}
+	if cfg.Scope == "" {
+		cfg.Scope = "origin"
+	}
+	if cfg.Scope != "url" && cfg.Scope != "origin" {
+		return nil, 0, fmt.Errorf("SignHTML: unsupported scope %q (want url or origin)", cfg.Scope)
 	}
 	if cfg.Algorithm != "ed25519" {
 		return nil, 0, fmt.Errorf("SignHTML: unsupported algorithm %q (only ed25519 supported)", cfg.Algorithm)
@@ -125,9 +132,12 @@ func signNode(n *html.Node, cfg SignerConfig) error {
 	if err != nil {
 		return fmt.Errorf("signNode: claims hash: %w", err)
 	}
-	binding, err := canon.BuildSignatureBinding(contentHash, claimsHash, cfg.Domain, signedAt)
+	binding, err := canon.BuildSigningPayloadV1(canon.SigningProfileV1Input{
+		ContentHash: contentHash, ClaimsHash: claimsHash, DocumentURL: cfg.BaseURL,
+		Scope: cfg.Scope, KeyID: cfg.Keyid, Algorithm: cfg.Algorithm, SignedAt: signedAt,
+	})
 	if err != nil {
-		return fmt.Errorf("signNode: build binding: %w", err)
+		return fmt.Errorf("signNode: build v1 payload: %w", err)
 	}
 	signature := SignEd25519(binding, cfg.PrivateKey)
 
@@ -135,6 +145,8 @@ func signNode(n *html.Node, cfg SignerConfig) error {
 	setAttr(n, "signature", signature)
 	setAttr(n, "keyid", cfg.Keyid)
 	setAttr(n, "algorithm", cfg.Algorithm)
+	setAttr(n, "profile", canon.SigningProfileV1)
+	setAttr(n, "signature-scope", cfg.Scope)
 	delAttr(n, "data-htmltrust-placeholder")
 	return nil
 }

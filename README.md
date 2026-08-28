@@ -126,6 +126,7 @@ htmltrust-sign \
   --dir public \
   --keyid did:web:jason-grey.com \
   --domain https://www.example.com \
+  --scope url \
   --keyfile $HOME/.htmltrust/signing-key.pem
 ```
 
@@ -144,6 +145,7 @@ htmltrust-sign --dir public --keyid did:web:jason-grey.com --domain https://www.
 | `--keyid` | _(required)_ | Identifier embedded in each `<signed-section>` and used by verifiers to fetch your public key. Standard form is `did:web:<host>`. |
 | `--domain` | _(required)_ | Publication origin for the signature binding, serialized as `scheme://host[:port]`. Bare hosts are accepted for compatibility and normalized to `https://host`. No path, query, fragment, or credentials. |
 | `--algorithm` | `ed25519` | Only `ed25519` is supported in this revision. |
+| `--scope` | `url` | Binds the signature to the page URL; `origin` permits same-origin reuse. |
 | `--keyfile` | _none_ | PEM-encoded PKCS#8 Ed25519 private key. Falls back to `HTMLTRUST_SIGNING_KEY` env var if unset. |
 | `--dry-run` | `false` | Report what would change without writing. |
 | `-v` | `false` | Print each file processed. |
@@ -158,6 +160,8 @@ After `hugo --minify` + `htmltrust-sign`:
     signature="0V7YTUfv0z2w9xhuPik9rBWPILZ9D5NHmF3ygqRlThHEPpjr55LoJ4hCddDL0FNn7wuqinfBK8OmCJIoDr7MCQ"
     keyid="did:web:jason-grey.com"
     algorithm="ed25519"
+    profile="htmltrust-signature-v1"
+    signature-scope="url"
     style="display: block;">
   <meta name="author" content="…">
   <meta name="signed-at" content="2026-05-12T20:00:00Z">
@@ -227,18 +231,18 @@ Keep `signing-key.pem` private — in a password manager, a KMS, or a CI secret.
    2. Renders the inner HTML (everything between the tags) and canonicalizes signed content locally using the same Unicode normalization rules as [htmltrust-canonicalization/go](https://github.com/HTMLTrust/htmltrust-canonicalization). Direct child claim `<meta>` elements and excluded elements are omitted from content, while signed semantic attributes `href`, `src`, `alt`, and `aria-label` are included.
    3. Computes `content-hash = "sha256:" + RawStdBase64(sha256(canonical_text))`.
    4. Serializes the claims with the v1 escaping rules as sorted `name:content\n` records and hashes them the same way.
-   5. Builds the spec binding string `{content-hash}:{claims-hash}:{domain}:{signed-at}` via `canonicalize.BuildSignatureBinding`.
-   6. Signs the binding with the Ed25519 private key.
-   7. Rewrites the four required attributes and removes the placeholder marker.
+   5. Builds the RFC 8785 JSON signing payload with `canonicalize.BuildSigningPayloadV1`, binding the page URL and selected scope.
+   6. Signs the payload with the Ed25519 private key.
+   7. Rewrites the v1 profile, scope, and cryptographic attributes and removes the placeholder marker.
 
 ## Spec conformance
 
 - **Canonicalization:** uses [htmltrust-canonicalization/go](https://github.com/HTMLTrust/htmltrust-canonicalization) for Unicode text normalization and local DOM walking for the current signed semantic attribute and direct-child claim rules.
 - **Hash + signature encoding:** canonical unpadded standard Base64 (`base64.RawStdEncoding`).
-- **Binding format:** `{content-hash}:{claims-hash}:{domain}:{signed-at}` per spec §2.1. The legacy `domain` field carries the serialized publication origin.
+- **Signing payload:** RFC 8785 canonical JSON from `BuildSigningPayloadV1`, with URL or origin location derived from the page URL.
 - **Claim coverage:** every direct child `<meta name content>` claim is signed, including `author`, `signed-at`, and `claim:*`.
 - **Semantic attribute coverage:** `href`, `src`, `alt`, and `aria-label` on included descendants contribute to the content hash.
-- **Required attributes:** all four (`content-hash`, `signature`, `keyid`, `algorithm`) are emitted on every signed section.
+- **Required attributes:** v1 `profile`, `signature-scope`, `keyid`, `algorithm`, `content-hash`, and `signature` are emitted on every signed section.
 
 Verification against this signer's output is round-tripped against `canonicalize.VerifySignature` in the test suite.
 

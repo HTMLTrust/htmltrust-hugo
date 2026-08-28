@@ -52,6 +52,8 @@ func TestSignHTML_FillsAllRequiredAttrs(t *testing.T) {
 	for _, want := range []string{
 		`keyid="did:web:jason-grey.com"`,
 		`algorithm="ed25519"`,
+		`profile="htmltrust-signature-v1"`,
+		`signature-scope="origin"`,
 		`content-hash="sha256:`,
 		`signature="`,
 	} {
@@ -76,7 +78,7 @@ func TestSignHTML_FillsAllRequiredAttrs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimsHash: %v", err)
 	}
-	binding, err := canon.BuildSignatureBinding(contentHash, claimsHash, "https://www.htmltrust.org", "2026-05-12T20:00:00Z")
+	binding, err := canon.BuildSigningPayloadV1(canon.SigningProfileV1Input{ContentHash: contentHash, ClaimsHash: claimsHash, DocumentURL: "https://www.htmltrust.org/", Scope: "origin", KeyID: "did:web:jason-grey.com", Algorithm: "ed25519", SignedAt: "2026-05-12T20:00:00Z"})
 	if err != nil {
 		t.Fatalf("BuildSignatureBinding: %v", err)
 	}
@@ -190,7 +192,7 @@ func TestSignHTML_NormalizesBareDomainToOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimsHash: %v", err)
 	}
-	binding, err := canon.BuildSignatureBinding(contentHash, claimsHash, "https://www.htmltrust.org", "2026-05-12T20:00:00Z")
+	binding, err := canon.BuildSigningPayloadV1(canon.SigningProfileV1Input{ContentHash: contentHash, ClaimsHash: claimsHash, DocumentURL: "https://www.htmltrust.org/", Scope: "origin", KeyID: "did:web:jason-grey.com", Algorithm: "ed25519", SignedAt: "2026-05-12T20:00:00Z"})
 	if err != nil {
 		t.Fatalf("BuildSignatureBinding: %v", err)
 	}
@@ -244,7 +246,7 @@ func TestSignHTML_SignsAuthorSignedAtAndClaimMeta(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimsHash: %v", err)
 	}
-	binding, err := canon.BuildSignatureBinding(contentHash, claimsHash, "https://www.htmltrust.org", "2026-05-12T20:00:00Z")
+	binding, err := canon.BuildSigningPayloadV1(canon.SigningProfileV1Input{ContentHash: contentHash, ClaimsHash: claimsHash, DocumentURL: "https://www.htmltrust.org/", Scope: "origin", KeyID: "did:web:jason-grey.com", Algorithm: "ed25519", SignedAt: "2026-05-12T20:00:00Z"})
 	if err != nil {
 		t.Fatalf("BuildSignatureBinding: %v", err)
 	}

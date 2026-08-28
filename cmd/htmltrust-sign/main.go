@@ -39,6 +39,7 @@ func run(args []string) error {
 		dir       = fs.String("dir", "public", "directory of built HTML files to scan")
 		keyid     = fs.String("keyid", "", "keyid to embed (e.g. did:web:jason-grey.com) — required")
 		domain    = fs.String("domain", "", "publication origin for the signature binding (e.g. https://www.htmltrust.org). Bare hosts are normalized to https origins for compatibility — required")
+		scope     = fs.String("scope", "url", "signature location scope: url or origin")
 		algorithm = fs.String("algorithm", "ed25519", "signature algorithm (only ed25519 supported)")
 		keyfile   = fs.String("keyfile", "", "PEM-encoded PKCS#8 Ed25519 private key file (or set HTMLTRUST_SIGNING_KEY env var)")
 		dryRun    = fs.Bool("dry-run", false, "parse and report what would change, but don't write")
@@ -71,6 +72,7 @@ func run(args []string) error {
 		PrivateKey:       priv,
 		Keyid:            *keyid,
 		Algorithm:        *algorithm,
+		Scope:            *scope,
 		Domain:           origin,
 		SignedAtFallback: time.Now().UTC(),
 	}
