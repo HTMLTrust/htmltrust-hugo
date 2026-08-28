@@ -1,5 +1,5 @@
-github.com/HTMLTrust/htmltrust-canonicalization/go v0.0.0-20260828084755-b0c8f305425d h1:IBxkQ/WjEe7aKeKOWYxzfmJggwDRyLuVfsS0kyGCXgk=
-github.com/HTMLTrust/htmltrust-canonicalization/go v0.0.0-20260828084755-b0c8f305425d/go.mod h1:B4FjwhS0Lcm1Hw9izU/Dz9iqD3kRCvdfa3eQw2Y7j7s=
+github.com/HTMLTrust/htmltrust-canonicalization/go v0.0.0-20260828102949-5e51040dcaaf h1:zCmw6MhUakNXsAvsTIxPlFiuJAAwqxCQiyYlJfJOsLc=
+github.com/HTMLTrust/htmltrust-canonicalization/go v0.0.0-20260828102949-5e51040dcaaf/go.mod h1:B4FjwhS0Lcm1Hw9izU/Dz9iqD3kRCvdfa3eQw2Y7j7s=
 github.com/bits-and-blooms/bitset v1.20.0 h1:2F+rfL86jE2d/bmw7OhqUg2Sj/1rURkBn3MdfoPyRVU=
 github.com/bits-and-blooms/bitset v1.20.0/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
