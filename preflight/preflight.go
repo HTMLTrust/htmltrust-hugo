@@ -83,6 +83,12 @@ type DirectoryReport struct {
 	OK          bool         `json:"ok"`
 	Files       []FileReport `json:"files"`
 	Diagnostics []Diagnostic `json:"diagnostics"`
+
+	// Period carries period-key and signature-ledger information (spec
+	// draft §9.10). It is nil unless the caller supplied a private key via
+	// Options to WithPeriodReport (the CLI's --keyid/--keyfile flags), so a
+	// caller that never asks for it sees no "period" member at all.
+	Period *PeriodReport `json:"period,omitempty"`
 }
 
 func diagnostic(code, severity, message string, region int, context map[string]any) Diagnostic {
