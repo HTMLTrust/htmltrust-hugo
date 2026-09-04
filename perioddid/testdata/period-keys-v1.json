@@ -1,0 +1,51 @@
+{
+  "scheme": "htmltrust-period-v1",
+  "master_hex": "68746d6c74727573742d706572696f642d6d61737465722d766563746f723031",
+  "identity": "did:web:example.com",
+  "salt": "htmltrust-period-key-v1",
+  "prk_hex": "ee415fdcfd6d3a756908f59ff6cd57d547b6425b80e158239c85ce8fedb83ae7",
+  "periods": [
+    {
+      "period": 1,
+      "info_hex": "65643235353139006469643a7765623a6578616d706c652e636f6d0000000001",
+      "seed_hex": "366b14593ecdcf8576eaa1e01e382dba565c19721298141bdd8a61b7dc5f97cf",
+      "publicKey_hex": "fe4fa2e55597326ebd1a41af177229e33a4b4e7eba5772f1f9e30e1eb76dc6b5",
+      "publicKey_spki_b64": "MCowBQYDK2VwAyEA/k+i5VWXMm69GkGvF3Ip4zpLTn66V3Lx+eMOHrdtxrU",
+      "privateKey_pkcs8_b64": "MC4CAQAwBQYDK2VwBCIEIDZrFFk+zc+Fduqh4B44LbpWXBlyEpgUG92KYbfcX5fP",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA/k+i5VWXMm69GkGvF3Ip4zpLTn66V3Lx+eMOHrdtxrU=\n-----END PUBLIC KEY-----",
+      "publicKeyHash": "3m7IzwN6u3xAFWlADIKyPo96gSVTGWJvFSBp2mLH/Y8",
+      "signature_test_message": "htmltrust-period-key-v1 test",
+      "signature_b64": "Vy4XVpnBhnKrSSn0iQ/AT1sRUtx6edHCw9D13uWLp9I8KjU9xuhm12fJyo1zjJTBYNQXKqMq+rMeZr9CXiafCw"
+    },
+    {
+      "period": 2,
+      "info_hex": "65643235353139006469643a7765623a6578616d706c652e636f6d0000000002",
+      "seed_hex": "635511a0a7e5647ec9c3a29acb7e78faf135474c70240a33659bd46e40c16290",
+      "publicKey_hex": "6e8f1ff0c130361bc05d0fb78a3ed622a5fc1a1e4ba7ee7350f1018af8b14bf0",
+      "publicKey_spki_b64": "MCowBQYDK2VwAyEAbo8f8MEwNhvAXQ+3ij7WIqX8Gh5Lp+5zUPEBivixS/A",
+      "privateKey_pkcs8_b64": "MC4CAQAwBQYDK2VwBCIEIGNVEaCn5WR+ycOimst+ePrxNUdMcCQKM2Wb1G5AwWKQ",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAbo8f8MEwNhvAXQ+3ij7WIqX8Gh5Lp+5zUPEBivixS/A=\n-----END PUBLIC KEY-----",
+      "publicKeyHash": "u9pFP1f7hN0ZLr5o7CeoCDMBPKtsL8wWDRytzwK+p/w"
+    },
+    {
+      "period": 3,
+      "info_hex": "65643235353139006469643a7765623a6578616d706c652e636f6d0000000003",
+      "seed_hex": "f3c3d8ecb3c75f5b9a98755de3a086fd1d9893d26583f83b1edbbf66e23c9ae4",
+      "publicKey_hex": "3d2eb4af4f5f7239c99f4decd2adf4cb35e0b9453f171f17ffa19f517d38351a",
+      "publicKey_spki_b64": "MCowBQYDK2VwAyEAPS60r09fcjnJn03s0q30yzXguUU/Fx8X/6GfUX04NRo",
+      "privateKey_pkcs8_b64": "MC4CAQAwBQYDK2VwBCIEIPPD2Oyzx19bmph1XeOghv0dmJPSZYP4Ox7bv2biPJrk",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPS60r09fcjnJn03s0q30yzXguUU/Fx8X/6GfUX04NRo=\n-----END PUBLIC KEY-----",
+      "publicKeyHash": "D2o9ZeRXmNG6sjRC3pfyY6wzLeZr7JxyR6nodpepmp4"
+    },
+    {
+      "period": 12,
+      "info_hex": "65643235353139006469643a7765623a6578616d706c652e636f6d000000000c",
+      "seed_hex": "13e9cfcb245a5544a5ec2bfb7c316041ea85a18f9a2fcb7f0e2e37ffa41c8112",
+      "publicKey_hex": "8ac8a371d6f88878eba80489c6637a271645ff600b58914657613ac90d87a98f",
+      "publicKey_spki_b64": "MCowBQYDK2VwAyEAisijcdb4iHjrqASJxmN6JxZF/2ALWJFGV2E6yQ2HqY8",
+      "privateKey_pkcs8_b64": "MC4CAQAwBQYDK2VwBCIEIBPpz8skWlVEpewr+3wxYEHqhaGPmi/Lfw4uN/+kHIES",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAisijcdb4iHjrqASJxmN6JxZF/2ALWJFGV2E6yQ2HqY8=\n-----END PUBLIC KEY-----",
+      "publicKeyHash": "whI8mrEBCWKxHXBluQotscWQRp6dyzxo22q7PPN7j4s"
+    }
+  ]
+}
