@@ -9,6 +9,7 @@ import (
 	"time"
 
 	canon "github.com/HTMLTrust/htmltrust-canonicalization/go"
+	"github.com/HTMLTrust/htmltrust-hugo/perioddid"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
@@ -18,6 +19,15 @@ import (
 // element. SignedAtFallback supplies a timestamp if the page didn't set one.
 // Domain is retained as the configuration field name; its value is the HTTPS
 // publication origin used to derive each page URL.
+//
+// Ledger, DIDDocument, and Counts are all optional; leaving Ledger nil (the
+// zero value, and every existing caller of SignHTML before the signature
+// ledger existed) disables the ledger entirely and every section is signed
+// fresh, exactly as before. When Ledger is set, DIDDocument must be too --
+// replay decisions need it to check a period is not struck and to verify a
+// stored signature. Counts, if set, is mutated across every call so a
+// caller processing many files can report one combined replayed/signed
+// count at the end.
 type SignerConfig struct {
 	PrivateKey       ed25519.PrivateKey
 	Keyid            string
@@ -26,6 +36,12 @@ type SignerConfig struct {
 	Domain           string
 	BaseURL          string
 	SignedAtFallback time.Time // used if <meta name="signed-at"> absent
+
+	Ledger          *Ledger
+	DIDDocument     *perioddid.Document
+	ForceResignFrom int // --resign-periods lower bound, inclusive; 0 with ForceResignTo means "no forced range"
+	ForceResignTo   int
+	Counts          *LedgerCounts
 }
 
 // SignHTML parses the given HTML, signs every <signed-section> in place, and
@@ -136,14 +152,61 @@ func signNode(n *html.Node, cfg SignerConfig) error {
 	if err != nil {
 		return fmt.Errorf("signNode: claims hash: %w", err)
 	}
+
+	if cfg.Ledger != nil && cfg.DIDDocument != nil {
+		claimsNoSignedAt := make(map[string]string, len(claims))
+		for k, v := range claims {
+			if k != "signed-at" {
+				claimsNoSignedAt[k] = v
+			}
+		}
+		claimsHashNoSignedAt, err := ClaimsHash(claimsNoSignedAt)
+		if err != nil {
+			return fmt.Errorf("signNode: claims hash (excluding signed-at): %w", err)
+		}
+		if entry, ok := cfg.Ledger.Get(cfg.BaseURL); ok {
+			if eligible, _ := replayEligible(entry, contentHash, claimsHashNoSignedAt, cfg.DIDDocument, cfg.ForceResignFrom, cfg.ForceResignTo); eligible {
+				applyStoredAttributes(n, entry)
+				if cfg.Counts != nil {
+					cfg.Counts.Replayed++
+				}
+				return nil
+			}
+			if cfg.Counts != nil {
+				cfg.Counts.Replaced++
+			}
+		} else if cfg.Counts != nil {
+			cfg.Counts.FreshNew++
+		}
+		signature, err := signFresh(n, cfg, contentHash, claimsHash, signedAt)
+		if err != nil {
+			return err
+		}
+		cfg.Ledger.Set(LedgerEntry{
+			Location: cfg.BaseURL, ContentHash: contentHash, ClaimsHash: claimsHash,
+			ClaimsHashNoSignedAt: claimsHashNoSignedAt, SignedAt: signedAt, Keyid: cfg.Keyid,
+			Algorithm: cfg.Algorithm, Scope: cfg.Scope, Profile: canon.SigningProfileV1, Signature: signature,
+		})
+		return nil
+	}
+
+	_, err = signFresh(n, cfg, contentHash, claimsHash, signedAt)
+	return err
+}
+
+// signFresh builds the v1 signing payload, signs it, and writes every
+// signed-section attribute. It is the only place that actually produces a
+// new signature; both the no-ledger path and the ledger's "not eligible to
+// replay" path call it.
+func signFresh(n *html.Node, cfg SignerConfig, contentHash, claimsHash, signedAt string) (signature string, err error) {
 	binding, err := canon.BuildSigningPayloadV1(canon.SigningProfileV1Input{
 		ContentHash: contentHash, ClaimsHash: claimsHash, DocumentURL: cfg.BaseURL,
 		Scope: cfg.Scope, KeyID: cfg.Keyid, Algorithm: cfg.Algorithm, SignedAt: signedAt,
 	})
 	if err != nil {
-		return fmt.Errorf("signNode: build v1 payload: %w", err)
+		return "", fmt.Errorf("signNode: build v1 payload: %w", err)
 	}
-	signature := SignEd25519(binding, cfg.PrivateKey)
+	signature = SignEd25519(binding, cfg.PrivateKey)
 
 	setAttr(n, "content-hash", contentHash)
 	setAttr(n, "signature", signature)
@@ -152,7 +215,34 @@ func signNode(n *html.Node, cfg SignerConfig) error {
 	setAttr(n, "profile", canon.SigningProfileV1)
 	setAttr(n, "signature-scope", cfg.Scope)
 	delAttr(n, "data-htmltrust-placeholder")
-	return nil
+	return signature, nil
+}
+
+// applyStoredAttributes rewrites n's attributes and signed-at meta content
+// from a replayed ledger entry, instead of computing a fresh signature.
+func applyStoredAttributes(n *html.Node, entry LedgerEntry) {
+	upsertSignedAtMeta(n, entry.SignedAt)
+	setAttr(n, "content-hash", entry.ContentHash)
+	setAttr(n, "signature", entry.Signature)
+	setAttr(n, "keyid", entry.Keyid)
+	setAttr(n, "algorithm", entry.Algorithm)
+	setAttr(n, "profile", entry.Profile)
+	setAttr(n, "signature-scope", entry.Scope)
+	delAttr(n, "data-htmltrust-placeholder")
+}
+
+// upsertSignedAtMeta sets the content of an existing direct-child
+// <meta name="signed-at"> to value, or inserts one if none exists.
+func upsertSignedAtMeta(n *html.Node, value string) {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode && strings.ToLower(c.Data) == "meta" {
+			if name, ok := getAttrOK(c, "name"); ok && normalizePlainText(name) == "signed-at" {
+				setAttr(c, "content", value)
+				return
+			}
+		}
+	}
+	setSignedAtMeta(n, value)
 }
 
 // === DOM helpers ===
